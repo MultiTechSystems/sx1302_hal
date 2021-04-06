@@ -126,7 +126,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define RX_SUSPENDED        3    /* RX is suspended while a TX is ongoing */
 
 /* Maximum size of Tx gain LUT */
-#define TX_GAIN_LUT_SIZE_MAX 16
+#define TX_GAIN_LUT_SIZE_MAX 44
 
 /* Listen-Before-Talk */
 #define LGW_LBT_CHANNEL_NB_MAX 16 /* Maximum number of LBT channels */
@@ -264,6 +264,7 @@ struct lgw_pkt_tx_s {
     bool        no_header;      /*!> if true, enable implicit header mode (LoRa), fixed length (FSK) */
     uint16_t    size;           /*!> payload size in bytes */
     uint8_t     payload[256];   /*!> buffer containing the payload */
+    uint8_t     pwr_idx;
 };
 
 /**

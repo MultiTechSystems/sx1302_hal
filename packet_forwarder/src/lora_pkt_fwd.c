@@ -150,6 +150,14 @@ static char serv_port_up[8] = STR(DEFAULT_PORT_UP); /* server port for upstream 
 static char serv_port_down[8] = STR(DEFAULT_PORT_DW); /* server port for downstream traffic */
 static int keepalive_time = DEFAULT_KEEPALIVE; /* send a PULL_DATA request every X seconds, negative = disabled */
 
+static bool duty_cycle_enabled = false;
+static uint32_t duty_cycle_time_avail = 0;
+static uint32_t duty_cycle_period = 3600; // seconds in one hour
+static double duty_cycle_ratio = 0.10; // 10%
+static uint32_t duty_cycle_time_max = 3600 * 0.10 * 1000u; // max time-on-air in window
+
+static int max_tx_power = -99;  // limit tx power sent from a network server
+
 /* statistics collection configuration variables */
 static unsigned stat_interval = DEFAULT_STAT; /* time interval (in sec) at which statistics are collected and displayed */
 
@@ -244,6 +252,14 @@ static struct jit_queue_s jit_queue[LGW_RF_CHAIN_NB];
 /* Gateway specificities */
 static int8_t antenna_gain = 0;
 
+#define DEFAULT_TEMP_COMP_TYPE "SENSOR"
+#define DEFAULT_TEMP_COMP_FILE "/sys/class/hwmon/hwmon0/temp1_input"
+static char temp_comp_type[16] = {0};
+static uint8_t temp_comp_file_type = 0;
+static char temp_comp_file[128] = {0};
+static int temp_comp_value = 20;
+static bool temp_comp_enabled = false;
+
 /* TX capabilities */
 static struct lgw_tx_gain_lut_s txlut[LGW_RF_CHAIN_NB]; /* TX gain table */
 static uint32_t tx_freq_min[LGW_RF_CHAIN_NB]; /* lowest frequency supported by TX chain */
@@ -303,6 +319,177 @@ void thread_spectral_scan(void);
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE FUNCTIONS DEFINITION ----------------------------------------- */
 
+#define TEMP_LUT_SIZE_MAX 13
+
+/**
+@struct lgw_tx_alt_gain_s
+@brief Structure containing all gains of Tx chain
+*/
+struct lgw_tx_alt_gain_s {
+    uint8_t pa_gain;    /*!> 2 bits, control of the external PA (SX1301 I/O) */
+    uint8_t pwr_idx;   /*!> 2 bits, control of the radio DAC */
+    int8_t  rf_power;   /*!> measured TX power at the board connector, in dBm */
+};
+
+/**
+@struct lgw_tx_alt_gain_lut_s
+@brief Structure defining the Tx gain LUT
+*/
+struct lgw_tx_alt_gain_lut_s {
+    float                       pwr_idx[44];
+    int8_t                      temp;
+    uint8_t                     size;                       /*!> Number of LUT indexes */
+};
+
+/**
+@struct lgw_tx_alt_gain_lut_s
+@brief Structure defining the Tx gain LUT
+*/
+struct lgw_tx_temp_lut_s {
+    struct lgw_tx_alt_gain_s        base[TX_GAIN_LUT_SIZE_MAX]; /*!> Array of Tx gain struct */
+    struct lgw_tx_alt_gain_lut_s    lut[TEMP_LUT_SIZE_MAX];     /*!> Array of Tx gain struct */
+    uint8_t                         size;                       /*!> Number of LUT indexes */
+};
+
+struct lgw_tx_temp_lut_s tx_temp_lut;
+
+void lookup_power_settings(float tx_pwr, int8_t* rf_power, int8_t* pwr_idx) {
+    float min_diff = 99;
+
+    for (int i = 0; i < TEMP_LUT_SIZE_MAX; i++) {
+        if (i == TEMP_LUT_SIZE_MAX-1 || (tx_temp_lut.lut[i].temp <= temp_comp_value && tx_temp_lut.lut[i+1].temp > temp_comp_value)) {
+            for (int j = 0; j < TX_GAIN_LUT_SIZE_MAX/2; j++) {
+                for (int h = 0; h < 2; h++) {
+                    if (tx_pwr >= tx_temp_lut.lut[i].pwr_idx[j*2+h] && (tx_pwr - tx_temp_lut.lut[i].pwr_idx[j*2+h]) < min_diff) {
+                        min_diff = (tx_pwr - tx_temp_lut.lut[i].pwr_idx[j*2+h]);
+                        *rf_power = j;
+                        *pwr_idx = h;
+                    }
+                }
+            }
+            break;
+        }
+    }
+
+    if (min_diff == 99) {
+        // minimum output if no match was found
+        *rf_power = 0;
+        *pwr_idx = 0;
+    }
+}
+
+void load_temp_lookup() {
+
+    int i;
+    char param_name[32]; /* used to generate variable parameter names */
+    JSON_Value *root_val = NULL;
+    JSON_Object *conf_obj = NULL;
+    JSON_Object *conf_lut_obj = NULL;
+    JSON_Value *val = NULL;
+    JSON_Array *conf_array = NULL;
+    char *temp_lut_path= "temp_lut.json"; /* contain temperature lut configuration */
+    if (access(temp_lut_path, R_OK) != 0) { /* if there is a global conf, parse it and then try to parse local conf  */
+        return;
+    }
+
+    MSG("INFO: found temp_lut configuration file %s, parsing it\n", temp_lut_path);
+
+    memset(&tx_temp_lut, 0, sizeof tx_temp_lut); /* initialize configuration structure */
+
+    /* try to parse JSON */
+    root_val = json_parse_file_with_comments(temp_lut_path);
+    if (root_val == NULL) {
+        MSG("ERROR: %s is not a valid JSON file\n", temp_lut_path);
+        exit(EXIT_FAILURE);
+    }
+
+    /* point to the gateway configuration object */
+    conf_obj = json_object_get_object(json_value_get_object(root_val), "LUT-BASE");
+    if (conf_obj == NULL) {
+        return;
+    }
+
+    temp_comp_enabled = true;
+
+    for (i = 0; i < TX_GAIN_LUT_SIZE_MAX; i++) {
+        snprintf(param_name, sizeof param_name, "tx_lut_%i", i); /* compose parameter path inside JSON structure */
+        conf_lut_obj = json_object_get_object(conf_obj, param_name); /* fetch value (if possible) */
+        if (conf_lut_obj == NULL) {
+            MSG("INFO: no configuration for tx gain lut %i\n", i);
+            continue;
+        }
+        tx_temp_lut.size++; /* update TX LUT size based on JSON object found in configuration file */
+        /* there is an object to configure that TX gain index, let's parse it */
+        snprintf(param_name, sizeof param_name, "tx_lut_%i.pa_gain", i);
+        val = json_object_dotget_value(conf_obj, param_name);
+        if (json_value_get_type(val) == JSONNumber) {
+            tx_temp_lut.base[i].pa_gain = (uint8_t)json_value_get_number(val);
+        } else {
+            MSG("WARNING: Data type for %s[%d] seems wrong, please check\n", param_name, i);
+            tx_temp_lut.base[i].pa_gain = 0;
+        }
+        snprintf(param_name, sizeof param_name, "tx_lut_%i.pwr_idx", i);
+        val = json_object_dotget_value(conf_obj, param_name);
+        if (json_value_get_type(val) == JSONNumber) {
+            tx_temp_lut.base[i].pwr_idx = (uint8_t)json_value_get_number(val);
+        } else {
+            MSG("WARNING: Data type for %s[%d] seems wrong, please check\n", param_name, i);
+            tx_temp_lut.base[i].pwr_idx = 0;
+        }
+        snprintf(param_name, sizeof param_name, "tx_lut_%i.rf_power", i);
+        val = json_object_dotget_value(conf_obj, param_name);
+        if (json_value_get_type(val) == JSONNumber) {
+            tx_temp_lut.base[i].rf_power = (int8_t)json_value_get_number(val);
+        } else {
+            MSG("WARNING: Data type for %s[%d] seems wrong, please check\n", param_name, i);
+            tx_temp_lut.base[i].rf_power = 0;
+        }
+    }
+
+    int index = 0;
+    for (int temp = -60; temp <= 100; temp++) {
+        snprintf(param_name, sizeof param_name, "LUT%i", temp); /* compose parameter path inside JSON structure */
+        conf_array = json_object_get_array(json_value_get_object(root_val), param_name);
+        if (conf_array != NULL) {
+            tx_temp_lut.lut[index].temp = temp;
+            for (int j = 0; j < 44; j++) {
+                /* Get lut channel configuration object from array */
+                tx_temp_lut.lut[index].pwr_idx[j] = (float)json_array_get_number(conf_array, j);
+            }
+            index++;
+        }
+    }
+}
+
+
+static void update_temp_comp_value() {
+    if (!temp_comp_enabled) {
+        return;
+    }
+    /* try to open file to read */
+    FILE *filePointer;
+
+    if ((filePointer = fopen(temp_comp_file, "r"))) {
+        int bufferLength = 10;
+        char buffer[bufferLength];
+
+        fgets(buffer, bufferLength, filePointer);
+
+        temp_comp_value = atoi(buffer);
+
+        if (temp_comp_file_type == 0) {
+            // SENSOR provides a mC reading
+            temp_comp_value = ((temp_comp_value % 1000) >= 500 ? 1 : 0) + (temp_comp_value / 1000);
+        }
+
+        fclose(filePointer);
+    }
+
+}
+
+
+
+
 static void usage( void )
 {
     printf("~~~ Library version string~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
@@ -339,6 +526,7 @@ static int parse_SX130x_configuration(const char * conf_file) {
     JSON_Array *conf_txlut_array = NULL;
     JSON_Array *conf_lbtchan_array = NULL;
     JSON_Array *conf_demod_array = NULL;
+    JSON_Object *conf_temp_comp_obj = NULL;
 
     struct lgw_conf_board_s boardconf;
     struct lgw_conf_rxrf_s rfconf;
@@ -428,6 +616,45 @@ static int parse_SX130x_configuration(const char * conf_file) {
         }
     }
     MSG("INFO: antenna_gain %d dBi\n", antenna_gain);
+
+    conf_temp_comp_obj = json_object_get_object(conf_obj, "temperature_comp"); /* fetch value (if possible) */
+    if (conf_temp_comp_obj == NULL) {
+        MSG("INFO: Default Temperature Compensation\n");
+        strncpy(temp_comp_file, DEFAULT_TEMP_COMP_FILE, sizeof(temp_comp_file)-1);
+    } else {
+        val = json_object_get_value(conf_temp_comp_obj, "enable"); /* fetch value (if possible) */
+        if (json_value_get_type(val) == JSONBoolean) {
+            temp_comp_enabled = (bool)json_value_get_boolean(val);
+        }
+
+        if (temp_comp_enabled) {
+            MSG("INFO: Temperature Compensation enabled\n");
+
+            /* Current temperature path (optional) */
+            str = json_object_get_string(conf_temp_comp_obj, "current_temp_file");
+            if (str != NULL) {
+                strncpy(temp_comp_file, str, sizeof(temp_comp_file)-1);
+                MSG("INFO: Current temperature file is configured to \"%s\"\n", temp_comp_file);
+            } else {
+                strncpy(temp_comp_file, DEFAULT_TEMP_COMP_FILE, sizeof(temp_comp_file)-1);
+            }
+
+            /* Current temperature type (optional) */
+            str = json_object_get_string(conf_temp_comp_obj, "current_temp_type");
+            if (str != NULL) {
+                strncpy(temp_comp_type, str, sizeof(temp_comp_type)-1);
+                MSG("INFO: Current temperature file is configured to \"%s\"\n", temp_comp_type);
+            } else {
+                strncpy(temp_comp_type, DEFAULT_TEMP_COMP_TYPE, sizeof(temp_comp_type)-1);
+            }
+
+            if (strncmp(temp_comp_type, "FILE", 4) == 0) {
+                temp_comp_file_type = 1;
+            }
+        } else {
+            MSG("INFO: Temperature Compensation disabled\n");
+        }
+    }
 
     /* set timestamp configuration */
     conf_ts_obj = json_object_get_object(conf_obj, "fine_timestamp");
@@ -718,97 +945,113 @@ static int parse_SX130x_configuration(const char * conf_file) {
                         MSG("WARNING: no frequency range specified for TX rf chain %d\n", i);
                     }
 
-                    /* set configuration for tx gains */
-                    memset(&txlut[i], 0, sizeof txlut[i]); /* initialize configuration structure */
-                    snprintf(param_name, sizeof param_name, "radio_%i.tx_gain_lut", i);
-                    conf_txlut_array = json_object_dotget_array(conf_obj, param_name);
-                    if (conf_txlut_array != NULL) {
-                        txlut[i].size = json_array_get_count(conf_txlut_array);
-                        /* Detect if we have a sx125x or sx1250 configuration */
-                        conf_txgain_obj = json_array_get_object(conf_txlut_array, 0);
-                        val = json_object_dotget_value(conf_txgain_obj, "pwr_idx");
-                        if (val != NULL) {
-                            printf("INFO: Configuring Tx Gain LUT for rf_chain %u with %u indexes for sx1250\n", i, txlut[i].size);
-                            sx1250_tx_lut = true;
-                        } else {
-                            printf("INFO: Configuring Tx Gain LUT for rf_chain %u with %u indexes for sx125x\n", i, txlut[i].size);
-                            sx1250_tx_lut = false;
-                        }
-                        /* Parse the table */
-                        for (j = 0; j < (int)txlut[i].size; j++) {
-                             /* Sanity check */
-                            if (j >= TX_GAIN_LUT_SIZE_MAX) {
-                                printf("ERROR: TX Gain LUT [%u] index %d not supported, skip it\n", i, j);
-                                break;
-                            }
-                            /* Get TX gain object from LUT */
-                            conf_txgain_obj = json_array_get_object(conf_txlut_array, j);
-                            /* rf power */
-                            val = json_object_dotget_value(conf_txgain_obj, "rf_power");
-                            if (json_value_get_type(val) == JSONNumber) {
-                                txlut[i].lut[j].rf_power = (int8_t)json_value_get_number(val);
-                            } else {
-                                printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "rf_power", j);
-                                txlut[i].lut[j].rf_power = 0;
-                            }
-                            /* PA gain */
-                            val = json_object_dotget_value(conf_txgain_obj, "pa_gain");
-                            if (json_value_get_type(val) == JSONNumber) {
-                                txlut[i].lut[j].pa_gain = (uint8_t)json_value_get_number(val);
-                            } else {
-                                printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "pa_gain", j);
-                                txlut[i].lut[j].pa_gain = 0;
-                            }
-                            if (sx1250_tx_lut == false) {
-                                /* DIG gain */
-                                val = json_object_dotget_value(conf_txgain_obj, "dig_gain");
-                                if (json_value_get_type(val) == JSONNumber) {
-                                    txlut[i].lut[j].dig_gain = (uint8_t)json_value_get_number(val);
-                                } else {
-                                    printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "dig_gain", j);
-                                    txlut[i].lut[j].dig_gain = 0;
-                                }
-                                /* DAC gain */
-                                val = json_object_dotget_value(conf_txgain_obj, "dac_gain");
-                                if (json_value_get_type(val) == JSONNumber) {
-                                    txlut[i].lut[j].dac_gain = (uint8_t)json_value_get_number(val);
-                                } else {
-                                    printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "dac_gain", j);
-                                    txlut[i].lut[j].dac_gain = 3; /* This is the only dac_gain supported for now */
-                                }
-                                /* MIX gain */
-                                val = json_object_dotget_value(conf_txgain_obj, "mix_gain");
-                                if (json_value_get_type(val) == JSONNumber) {
-                                    txlut[i].lut[j].mix_gain = (uint8_t)json_value_get_number(val);
-                                } else {
-                                    printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "mix_gain", j);
-                                    txlut[i].lut[j].mix_gain = 0;
-                                }
-                            } else {
-                                /* TODO: rework this, should not be needed for sx1250 */
-                                txlut[i].lut[j].mix_gain = 5;
+                    if (temp_comp_enabled) {
+                        update_temp_comp_value();
 
-                                /* power index */
-                                val = json_object_dotget_value(conf_txgain_obj, "pwr_idx");
+                        MSG("INFO: Loading temperature compensated LUT values\n");
+
+                        for (j = 0; j < TX_GAIN_LUT_SIZE_MAX; j++) {
+                            txlut[i].lut[j].rf_power = tx_temp_lut.base[j].rf_power;
+                            txlut[i].lut[j].pa_gain = tx_temp_lut.base[j].pa_gain;
+                            txlut[i].lut[j].pwr_idx = tx_temp_lut.base[j].pwr_idx;
+                            /* TODO: rework this, should not be needed for sx1250 */
+                            txlut[i].lut[j].mix_gain = 5;
+                            MSG("RADIO: %d LUT %d RF: %d PA: %d IDX: %d\n", i, j, txlut[i].lut[j].rf_power, txlut[i].lut[j].pa_gain, txlut[i].lut[j].pwr_idx);
+                        }
+                    } else {
+
+                        /* set configuration for tx gains */
+                        memset(&txlut[i], 0, sizeof txlut[i]); /* initialize configuration structure */
+                        snprintf(param_name, sizeof param_name, "radio_%i.tx_gain_lut", i);
+                        conf_txlut_array = json_object_dotget_array(conf_obj, param_name);
+                        if (conf_txlut_array != NULL) {
+                            txlut[i].size = json_array_get_count(conf_txlut_array);
+                            /* Detect if we have a sx125x or sx1250 configuration */
+                            conf_txgain_obj = json_array_get_object(conf_txlut_array, 0);
+                            val = json_object_dotget_value(conf_txgain_obj, "pwr_idx");
+                            if (val != NULL) {
+                                printf("INFO: Configuring Tx Gain LUT for rf_chain %u with %u indexes for sx1250\n", i, txlut[i].size);
+                                sx1250_tx_lut = true;
+                            } else {
+                                printf("INFO: Configuring Tx Gain LUT for rf_chain %u with %u indexes for sx125x\n", i, txlut[i].size);
+                                sx1250_tx_lut = false;
+                            }
+                            /* Parse the table */
+                            for (j = 0; j < (int)txlut[i].size; j++) {
+                                /* Sanity check */
+                                if (j >= TX_GAIN_LUT_SIZE_MAX) {
+                                    printf("ERROR: TX Gain LUT [%u] index %d not supported, skip it\n", i, j);
+                                    break;
+                                }
+                                /* Get TX gain object from LUT */
+                                conf_txgain_obj = json_array_get_object(conf_txlut_array, j);
+                                /* rf power */
+                                val = json_object_dotget_value(conf_txgain_obj, "rf_power");
                                 if (json_value_get_type(val) == JSONNumber) {
-                                    txlut[i].lut[j].pwr_idx = (uint8_t)json_value_get_number(val);
+                                    txlut[i].lut[j].rf_power = (int8_t)json_value_get_number(val);
                                 } else {
-                                    printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "pwr_idx", j);
-                                    txlut[i].lut[j].pwr_idx = 0;
+                                    printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "rf_power", j);
+                                    txlut[i].lut[j].rf_power = 0;
+                                }
+                                /* PA gain */
+                                val = json_object_dotget_value(conf_txgain_obj, "pa_gain");
+                                if (json_value_get_type(val) == JSONNumber) {
+                                    txlut[i].lut[j].pa_gain = (uint8_t)json_value_get_number(val);
+                                } else {
+                                    printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "pa_gain", j);
+                                    txlut[i].lut[j].pa_gain = 0;
+                                }
+                                if (sx1250_tx_lut == false) {
+                                    /* DIG gain */
+                                    val = json_object_dotget_value(conf_txgain_obj, "dig_gain");
+                                    if (json_value_get_type(val) == JSONNumber) {
+                                        txlut[i].lut[j].dig_gain = (uint8_t)json_value_get_number(val);
+                                    } else {
+                                        printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "dig_gain", j);
+                                        txlut[i].lut[j].dig_gain = 0;
+                                    }
+                                    /* DAC gain */
+                                    val = json_object_dotget_value(conf_txgain_obj, "dac_gain");
+                                    if (json_value_get_type(val) == JSONNumber) {
+                                        txlut[i].lut[j].dac_gain = (uint8_t)json_value_get_number(val);
+                                    } else {
+                                        printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "dac_gain", j);
+                                        txlut[i].lut[j].dac_gain = 3; /* This is the only dac_gain supported for now */
+                                    }
+                                    /* MIX gain */
+                                    val = json_object_dotget_value(conf_txgain_obj, "mix_gain");
+                                    if (json_value_get_type(val) == JSONNumber) {
+                                        txlut[i].lut[j].mix_gain = (uint8_t)json_value_get_number(val);
+                                    } else {
+                                        printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "mix_gain", j);
+                                        txlut[i].lut[j].mix_gain = 0;
+                                    }
+                                } else {
+                                    /* TODO: rework this, should not be needed for sx1250 */
+                                    txlut[i].lut[j].mix_gain = 5;
+
+                                    /* power index */
+                                    val = json_object_dotget_value(conf_txgain_obj, "pwr_idx");
+                                    if (json_value_get_type(val) == JSONNumber) {
+                                        txlut[i].lut[j].pwr_idx = (uint8_t)json_value_get_number(val);
+                                    } else {
+                                        printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "pwr_idx", j);
+                                        txlut[i].lut[j].pwr_idx = 0;
+                                    }
                                 }
                             }
-                        }
-                        /* all parameters parsed, submitting configuration to the HAL */
-                        if (txlut[i].size > 0) {
-                            if (lgw_txgain_setconf(i, &txlut[i]) != LGW_HAL_SUCCESS) {
-                                MSG("ERROR: Failed to configure concentrator TX Gain LUT for rf_chain %u\n", i);
-                                return -1;
+                            /* all parameters parsed, submitting configuration to the HAL */
+                            if (txlut[i].size > 0) {
+                                if (lgw_txgain_setconf(i, &txlut[i]) != LGW_HAL_SUCCESS) {
+                                    MSG("ERROR: Failed to configure concentrator TX Gain LUT for rf_chain %u\n", i);
+                                    return -1;
+                                }
+                            } else {
+                                MSG("WARNING: No TX gain LUT defined for rf_chain %u\n", i);
                             }
                         } else {
                             MSG("WARNING: No TX gain LUT defined for rf_chain %u\n", i);
                         }
-                    } else {
-                        MSG("WARNING: No TX gain LUT defined for rf_chain %u\n", i);
                     }
                 }
             } else {
@@ -1081,6 +1324,36 @@ static int parse_gateway_configuration(const char * conf_file) {
     if (val != NULL) {
         push_timeout_half.tv_usec = 500 * (long int)json_value_get_number(val);
         MSG("INFO: upstream PUSH_DATA time-out is configured to %u ms\n", (unsigned)(push_timeout_half.tv_usec / 500));
+    }
+
+    /* duty-cycle limiting */
+    val = json_object_get_value(conf_obj, "duty_cycle_enabled");
+    if (json_value_get_type(val) == JSONBoolean) {
+        duty_cycle_enabled = (bool)json_value_get_boolean(val);
+    }
+    MSG("INFO: duty cycle will%s be enforced\n", (duty_cycle_enabled ? "" : " NOT"));
+
+    if (duty_cycle_enabled) {
+        val = json_object_get_value(conf_obj, "duty_cycle_period");
+        if (val != NULL) {
+            duty_cycle_period = (unsigned)json_value_get_number(val);
+        }
+        MSG("INFO: duty cycle period %u s\n", (duty_cycle_period));
+
+        val = json_object_get_value(conf_obj, "duty_cycle_ratio");
+        if (val != NULL) {
+            duty_cycle_ratio = (double)json_value_get_number(val);
+        }
+        MSG("INFO: duty cycle %f %%\n", (duty_cycle_ratio * 100));
+
+        duty_cycle_time_max = duty_cycle_period * 1000u * duty_cycle_ratio;
+    }
+
+    /* max tx power */
+    val = json_object_get_value(conf_obj, "max_tx_power");
+    if (val != NULL) {
+        max_tx_power = (int)json_value_get_number(val);
+        MSG("INFO: max tx power %d\n", (max_tx_power));
     }
 
     /* packet filtering parameters */
@@ -1845,6 +2118,12 @@ int main(int argc, char ** argv)
             printf("# SX1302 counter (INST): %u\n", inst_tstamp);
             printf("# SX1302 counter (PPS):  %u\n", trig_tstamp);
         }
+
+        if (temp_comp_enabled) {
+            update_temp_comp_value();
+            printf("# Temperature:    %i C\n", temp_comp_value);
+        }
+
         printf("# BEACON queued: %u\n", cp_nb_beacon_queued);
         printf("# BEACON sent so far: %u\n", cp_nb_beacon_sent);
         printf("# BEACON rejected: %u\n", cp_nb_beacon_rejected);
@@ -2999,10 +3278,31 @@ void thread_down(void) {
                 continue;
             }
 
+            float pwr = 0;
+
             /* parse TX power (optional field) */
             val = json_object_get_value(txpk_obj,"powe");
             if (val != NULL) {
                 txpkt.rf_power = (int8_t)json_value_get_number(val) - antenna_gain;
+                if (max_tx_power != -99) {
+                    if (pwr > max_tx_power - antenna_gain) {
+                        MSG("INFO: [down] tx power reduced tx power: % dBm attn gain: %d dBi\n", max_tx_power, antenna_gain);
+                        pwr = max_tx_power - antenna_gain;
+                    }
+                }
+            }
+
+            if (temp_comp_enabled) {
+                /* look for power index and DIG gain for current temperature */
+                int8_t lut_pwr = 0;
+                int8_t lut_idx = 0;
+                lookup_power_settings(pwr, &lut_pwr, &lut_idx);
+                txpkt.rf_power = lut_pwr;
+                txpkt.pwr_idx = lut_idx;
+                /* look for power index and DIG gain for current temperature */
+                MSG("INFO: Tx power %f temp adjusted to PWR: %d IDX: %d\n", pwr, (int)txpkt.rf_power, (int)txpkt.pwr_idx);
+            } else {
+                txpkt.rf_power = pwr;
             }
 
             /* Parse modulation (mandatory) */
