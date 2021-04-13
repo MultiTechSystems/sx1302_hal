@@ -29,6 +29,14 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 
 #include "tinymt32.h"
 
+#if defined(NODEBUG)
+void dbg_init_random(void) {}
+void dbg_init_gpio(void) {}
+void dbg_log_buffer_to_file(FILE * file, uint8_t * buffer, uint16_t size) { (void) file; (void) buffer; (void) size; }
+void dbg_log_payload_diff_to_file(FILE * file, uint8_t * buffer1, uint8_t * buffer2, uint16_t size) { (void) file; (void) buffer1; (void) buffer2; (void) size; }
+int dbg_check_payload(struct lgw_conf_debug_s * context, FILE * file, uint8_t * payload_received, uint8_t size, uint8_t ref_payload_idx, uint8_t sf) {(void) context; (void) file; (void) payload_received; (void) size; (void) ref_payload_idx; (void) sf; return 0;}
+#else
+
 /* -------------------------------------------------------------------------- */
 /* --- DEBUG CONSTANTS ------------------------------------------------------ */
 
@@ -181,3 +189,4 @@ int dbg_check_payload(struct lgw_conf_debug_s * context, FILE * file, uint8_t * 
 
     return 0; /* ignored */
 }
+#endif
