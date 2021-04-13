@@ -246,7 +246,7 @@ static void usage(void) {
     printf("~~~ Available options ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
     printf(" -h            print this help\n");
     printf(" -d <path>     use Linux I2C device driver\n");
-    printf("               => default path: " i2c_path "\n");
+    printf("               => default path: " I2C_DEVICE "\n");
 }
 
 /* --- EOF ------------------------------------------------------------------ */
