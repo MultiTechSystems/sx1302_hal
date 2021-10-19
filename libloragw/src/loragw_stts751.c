@@ -66,6 +66,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 
 #define STTS751_0_PROD_ID       0x00
 #define STTS751_1_PROD_ID       0x01
+#define TMP_102_PROD_ID         0x06
 #define ST_MAN_ID               0x53
 
 /* -------------------------------------------------------------------------- */
@@ -74,47 +75,18 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE FUNCTIONS ---------------------------------------------------- */
 
-/* -------------------------------------------------------------------------- */
-/* --- PUBLIC FUNCTIONS DEFINITION ------------------------------------------ */
-
-int stts751_configure(int i2c_fd, uint8_t i2c_addr) {
+static inline int stts751_setup(int i2c_fd, uint8_t i2c_addr) {
     int err;
     uint8_t val;
-
-    /* Check Input Params */
-    if (i2c_fd <= 0) {
-        printf("ERROR: invalid I2C file descriptor\n");
-        return LGW_I2C_ERROR;
-    }
-
-    DEBUG_PRINTF("INFO: configuring STTS751 temperature sensor on 0x%02X...\n", i2c_addr);
-
-    /* Get product ID  and test which sensor is mounted */
-    err = i2c_linuxdev_read(i2c_fd, i2c_addr, STTS751_REG_PROD_ID, &val);
-    if (err != 0) {
-        DEBUG_PRINTF("ERROR: failed to read I2C device 0x%02X (err=%i)\n", i2c_addr, err);
-        return LGW_I2C_ERROR;
-    }
-    switch (val) {
-        case STTS751_0_PROD_ID:
-            DEBUG_MSG("INFO: Product ID: STTS751-0\n");
-            break;
-        case STTS751_1_PROD_ID:
-            DEBUG_MSG("INFO: Product ID: STTS751-1\n");
-            break;
-        default:
-            printf("ERROR: Product ID: UNKNOWN\n");
-            return LGW_I2C_ERROR;
-    }
-
-    /* Get Manufacturer ID */
+    // /* Get Manufacturer ID */
     err = i2c_linuxdev_read(i2c_fd, i2c_addr, STTS751_REG_MAN_ID, &val);
     if (err != 0) {
-        DEBUG_PRINTF("ERROR: failed to read I2C device 0x%02X (err=%i)\n", i2c_addr, err);
+        DEBUG_MSG("ERROR: failed to read I2C device 0x%02X (err=%i)\n", i2c_addr, err);
         return LGW_I2C_ERROR;
     }
+
     if (val != ST_MAN_ID) {
-        printf("ERROR: Manufacturer ID: UNKNOWN\n");
+        DEBUG_MSG("ERROR: Manufacturer ID: UNKNOWN\n");
         return LGW_I2C_ERROR;
     } else {
         DEBUG_PRINTF("INFO: Manufacturer ID: 0x%02X\n", val);
@@ -145,9 +117,56 @@ int stts751_configure(int i2c_fd, uint8_t i2c_addr) {
     return LGW_I2C_SUCCESS;
 }
 
+/* -------------------------------------------------------------------------- */
+/* --- PUBLIC FUNCTIONS DEFINITION ------------------------------------------ */
+
+int temp_sensor_configure(int i2c_fd, uint8_t i2c_addr) {
+    int err;
+    uint8_t val;
+
+    /* Check Input Params */
+    if (i2c_fd <= 0) {
+        printf("ERROR: invalid I2C file descriptor\n");
+        return LGW_I2C_ERROR;
+    }
+
+    DEBUG_PRINTF("INFO: configuring STTS751 temperature sensor on 0x%02X...\n", i2c_addr);
+
+    /* Get product ID  and test which sensor is mounted */
+    err = i2c_linuxdev_read(i2c_fd, i2c_addr, STTS751_REG_PROD_ID, &val);
+
+    if (err != 0) {
+        DEBUG_PRINTF("ERROR: failed to read I2C device 0x%02X (err=%i)\n", i2c_addr, err);
+        return LGW_I2C_ERROR;
+    }
+    switch (val) {
+        case STTS751_0_PROD_ID:
+            DEBUG_MSG("INFO: Product ID: STTS751-0\n");
+            err = stts751_setup(&i2c_fd, &i2c_addr);
+            break;
+        case STTS751_1_PROD_ID:
+            DEBUG_MSG("INFO: Product ID: STTS751-1\n");
+            err = stts751_setup(&i2c_fd, &i2c_addr);
+            break;
+        case TMP_102_PROD_ID:
+            DEBUG_MSG("INFO: Product ID: TMP-102\n");
+            break;
+        default:
+            printf("ERROR: Product ID: UNKNOWN\n");
+            return LGW_I2C_ERROR;
+    }
+
+    if (err != 0) {
+        DEBUG_PRINTF("ERROR: failed configure sensor\n");
+        return LGW_I2C_ERROR;
+    } else {
+        return LGW_I2C_SUCCESS;
+    }
+}
+
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
-int stts751_get_temperature(int i2c_fd, uint8_t i2c_addr, float * temperature) {
+int spi_com_get_temperature(int i2c_fd, uint8_t i2c_addr, float * temperature) {
     int err;
     uint8_t high_byte, low_byte;
     int8_t h;

@@ -37,8 +37,10 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
   0x39: STTS751-0DP3F
   0x3B: STTS751-1DP3F
   0x38: STTS751-0DP3F on full duplex CN490 ref design
+  0x48: TMP102-AP1
+  0x49: TMP102-AP2
   */
-static const uint8_t I2C_PORT_TEMP_SENSOR[] = {0x39, 0x3B, 0x38};
+static const uint8_t I2C_PORT_TEMP_SENSOR[] = {0x48, 0x49, 0x39, 0x3B, 0x38};
 
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC FUNCTIONS ----------------------------------------------------- */
@@ -49,7 +51,7 @@ static const uint8_t I2C_PORT_TEMP_SENSOR[] = {0x39, 0x3B, 0x38};
 @param i2c_addr the I2C device address of the sensor
 @return LGW_I2C_ERROR if fails, LGW_I2C_SUCCESS otherwise
 */
-int stts751_configure(int i2c_fd, uint8_t i2c_addr);
+int temp_sensor_configure(int i2c_fd, uint8_t i2c_addr);
 
 /**
 @brief Get the temperature from the sensor
@@ -58,7 +60,7 @@ int stts751_configure(int i2c_fd, uint8_t i2c_addr);
 @param temperature pointer to store the temerature read from sensor
 @return LGW_I2C_ERROR if fails, LGW_I2C_SUCCESS otherwise
 */
-int stts751_get_temperature(int i2c_fd, uint8_t i2c_addr, float * temperature);
+int spi_com_get_temperature(int i2c_fd, uint8_t i2c_addr, float * temperature);
 
 #endif
 
