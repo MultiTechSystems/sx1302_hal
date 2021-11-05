@@ -209,6 +209,29 @@ static uint8_t ts_addr = 0xFF;
 /* I2C AD5338 handles */
 static int     ad_fd = -1;
 
+/* LGW reset command lists per accessory port */
+static const char *accessory_port_default[4] = {
+    "mts-io-sysfs store lora/reset 1",
+    "mts-io-sysfs store lora/reset 0",
+    "mts-io-sysfs store lora/lbtreset 1",
+    "mts-io-sysfs store lora/lbtreset 0"
+};
+
+static const char *accessory_port_1[4] = {
+    "mts-io-sysfs store ap1/reset 1",
+    "mts-io-sysfs store ap1/reset 0",
+    "mts-io-sysfs store ap1/lbtreset 1",
+    "mts-io-sysfs store ap1/lbtreset 0"
+};
+
+static const char *accessory_port_2[4] = {
+    "mts-io-sysfs store ap2/reset 1",
+    "mts-io-sysfs store ap2/reset 0",
+    "mts-io-sysfs store ap2/lbtreset 1",
+    "mts-io-sysfs store ap2/lbtreset 0"
+};
+
+
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE FUNCTIONS DECLARATION ---------------------------------------- */
 
@@ -447,6 +470,25 @@ static int merge_packets(struct lgw_pkt_rx_s * p, uint8_t * nb_pkt) {
 
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC FUNCTIONS DEFINITION ------------------------------------------ */
+
+int reset_lgw() {
+    char **accessory_port;
+    if (strcmp(CONTEXT_COM_PATH, "/dev/spidev0.0") == 0) {
+        accessory_port = &accessory_port_default;
+    } else if (strcmp(CONTEXT_COM_PATH, "/dev/spidev1.0") == 0) {
+        accessory_port = &accessory_port_2;
+    } else {
+        return LGW_HAL_ERROR;
+    }
+
+    for(int i = 0; i < 4; i++) {
+        if (system(accessory_port[i]) != 0) {
+            return LGW_HAL_ERROR;
+        }
+        usleep( 100000 ); /* 100 ms */
+    }
+    return LGW_HAL_SUCCESS;
+}
 
 int lgw_board_setconf(struct lgw_conf_board_s * conf) {
     CHECK_NULL(conf);

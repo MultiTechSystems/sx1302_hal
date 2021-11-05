@@ -403,6 +403,11 @@ typedef enum lgw_spectral_scan_status_e {
 
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC FUNCTIONS PROTOTYPES ------------------------------------------ */
+/**
+@brief reset the lgw
+@return LGW_HAL_ERROR id the operation failed, LGW_HAL_SUCCESS else
+*/
+int reset_lgw();
 
 /**
 @brief Configure the gateway board

@@ -81,7 +81,7 @@ static inline int stts751_setup(int i2c_fd, uint8_t i2c_addr) {
     // /* Get Manufacturer ID */
     err = i2c_linuxdev_read(i2c_fd, i2c_addr, STTS751_REG_MAN_ID, &val);
     if (err != 0) {
-        DEBUG_MSG("ERROR: failed to read I2C device 0x%02X (err=%i)\n", i2c_addr, err);
+        DEBUG_PRINTF("ERROR: failed to read I2C device 0x%02X (err=%i)\n", i2c_addr, err);
         return LGW_I2C_ERROR;
     }
 
@@ -142,11 +142,11 @@ int temp_sensor_configure(int i2c_fd, uint8_t i2c_addr) {
     switch (val) {
         case STTS751_0_PROD_ID:
             DEBUG_MSG("INFO: Product ID: STTS751-0\n");
-            err = stts751_setup(&i2c_fd, &i2c_addr);
+            err = stts751_setup(i2c_fd, i2c_addr);
             break;
         case STTS751_1_PROD_ID:
             DEBUG_MSG("INFO: Product ID: STTS751-1\n");
-            err = stts751_setup(&i2c_fd, &i2c_addr);
+            err = stts751_setup(i2c_fd, i2c_addr);
             break;
         case TMP_102_PROD_ID:
             DEBUG_MSG("INFO: Product ID: TMP-102\n");
