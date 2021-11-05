@@ -210,21 +210,21 @@ static uint8_t ts_addr = 0xFF;
 static int     ad_fd = -1;
 
 /* LGW reset command lists per accessory port */
-static const char *accessory_port_default[4] = {
+static char *accessory_port_default[4] = {
     "mts-io-sysfs store lora/reset 1",
     "mts-io-sysfs store lora/reset 0",
     "mts-io-sysfs store lora/lbtreset 1",
     "mts-io-sysfs store lora/lbtreset 0"
 };
 
-static const char *accessory_port_1[4] = {
+static char *accessory_port_1[4] = {
     "mts-io-sysfs store ap1/reset 1",
     "mts-io-sysfs store ap1/reset 0",
     "mts-io-sysfs store ap1/lbtreset 1",
     "mts-io-sysfs store ap1/lbtreset 0"
 };
 
-static const char *accessory_port_2[4] = {
+static char *accessory_port_2[4] = {
     "mts-io-sysfs store ap2/reset 1",
     "mts-io-sysfs store ap2/reset 0",
     "mts-io-sysfs store ap2/lbtreset 1",
@@ -474,9 +474,9 @@ static int merge_packets(struct lgw_pkt_rx_s * p, uint8_t * nb_pkt) {
 int reset_lgw() {
     char **accessory_port;
     if (strcmp(CONTEXT_COM_PATH, "/dev/spidev0.0") == 0) {
-        accessory_port = &accessory_port_default;
+        accessory_port = &accessory_port_default[0];
     } else if (strcmp(CONTEXT_COM_PATH, "/dev/spidev1.0") == 0) {
-        accessory_port = &accessory_port_2;
+        accessory_port = &accessory_port_2[0];
     } else {
         return LGW_HAL_ERROR;
     }
