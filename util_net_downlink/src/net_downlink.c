@@ -50,7 +50,7 @@
 
 #include <pthread.h>
 
-#include "parson.h"
+#include "loragw_hal.h"
 #include "base64.h"
 
 /* -------------------------------------------------------------------------- */

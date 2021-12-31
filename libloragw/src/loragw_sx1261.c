@@ -31,7 +31,6 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #include "sx1261_com.h"
 
 #include "sx1261_pram.var"
-
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE MACROS ------------------------------------------------------- */
 

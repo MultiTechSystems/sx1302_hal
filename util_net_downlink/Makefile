@@ -35,10 +35,11 @@ endif
 
 ### Application-specific variables
 APP_NAME := net_downlink
-APP_LIBS := -lparson -lbase64 -lpthread
+APP_LIBS := -lloragw -lbase64 -lpthread
 
 ### Environment constants
-LIB_PATH := ../libtools
+LGW_PATH ?= ../libloragw
+LIB_PATH ?= ../libtools
 
 ### Expand build options
 CFLAGS := -std=c99 $(WARN_CFLAGS) $(OPT_CFLAGS) $(DEBUG_CFLAGS)
@@ -78,6 +79,6 @@ $(OBJDIR)/$(APP_NAME).o: src/$(APP_NAME).c | $(OBJDIR)
 
 ### Link everything together
 $(APP_NAME): $(OBJDIR)/$(APP_NAME).o
-	$(CC) -L$(LIB_PATH) $^ -o $@ $(LDFLAGS) $(APP_LIBS)
+	$(CC) -L$(LIB_PATH) -L$(LGW_PATH) $^ -o $@ $(LDFLAGS) $(APP_LIBS)
 
 ### EOF

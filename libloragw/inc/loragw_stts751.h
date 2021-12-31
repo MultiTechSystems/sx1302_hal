@@ -25,24 +25,6 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #include "config.h"     /* library configuration options (dynamically generated) */
 
 /* -------------------------------------------------------------------------- */
-/* --- INTERNAL SHARED TYPES ------------------------------------------------ */
-
-/* -------------------------------------------------------------------------- */
-/* --- INTERNAL SHARED FUNCTIONS -------------------------------------------- */
-
-/* -------------------------------------------------------------------------- */
-/* --- PUBLIC CONSTANTS ----------------------------------------------------- */
-
-/*
-  0x39: STTS751-0DP3F
-  0x3B: STTS751-1DP3F
-  0x38: STTS751-0DP3F on full duplex CN490 ref design
-  0x48: TMP102-AP1
-  0x49: TMP102-AP2
-  */
-static const uint8_t I2C_PORT_TEMP_SENSOR[] = {0x48, 0x49, 0x39, 0x3B, 0x38};
-
-/* -------------------------------------------------------------------------- */
 /* --- PUBLIC FUNCTIONS ----------------------------------------------------- */
 
 /**

@@ -79,7 +79,7 @@ int lgw_com_open(lgw_com_type_t com_type, const char * com_path) {
 
     switch (com_type) {
         case LGW_COM_SPI:
-            printf("Opening SPI communication interface\n");
+            printf("Opening SPI communication interface on %s\n", com_path);
             com_stat = lgw_spi_open(com_path, &_lgw_com_target);
             break;
         case LGW_COM_USB:

@@ -84,8 +84,6 @@ void usage(void) {
 int main(int argc, char **argv)
 {
     /* SPI interfaces */
-    const char com_path_default[] = COM_PATH_DEFAULT;
-    const char * com_path = com_path_default;
     lgw_com_type_t com_type = COM_TYPE_DEFAULT;
 
     struct sigaction sigact; /* SIGQUIT&SIGINT&SIGTERM signal handling */
@@ -100,6 +98,8 @@ int main(int argc, char **argv)
     struct lgw_conf_board_s boardconf;
     struct lgw_conf_rxrf_s rfconf;
     struct lgw_conf_rxif_s ifconf;
+
+    memset(&boardconf, 0, sizeof boardconf);
 
     uint32_t counter;
     bool trig_cnt = false;
@@ -127,7 +127,8 @@ int main(int argc, char **argv)
                 break;
             case 'd':
                 if (optarg != NULL) {
-                    com_path = optarg;
+                    strncpy(boardconf.com_path, optarg, sizeof boardconf.com_path);
+                    boardconf.com_path[sizeof boardconf.com_path - 1] = '\0'; /* ensure string termination */
                 }
                 break;
             case 'r': /* <uint> Radio type */
@@ -181,22 +182,11 @@ int main(int argc, char **argv)
 
     printf("===== sx1302 counter test =====\n");
 
-    if (com_type == LGW_COM_SPI) {
-        /* Board reset */
-        if (reset_lgw() != LGW_HAL_SUCCESS) {
-            printf("ERROR: failed to reset SX1302\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-
     /* Configure the gateway */
-    memset(&boardconf, 0, sizeof boardconf);
     boardconf.lorawan_public = true;
     boardconf.clksrc = clocksource;
     boardconf.full_duplex = false;
     boardconf.com_type = com_type;
-    strncpy(boardconf.com_path, com_path, sizeof boardconf.com_path);
-    boardconf.com_path[sizeof boardconf.com_path - 1] = '\0'; /* ensure string termination */
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
         printf("ERROR: failed to configure board\n");
         return EXIT_FAILURE;
@@ -235,6 +225,14 @@ int main(int argc, char **argv)
         if (lgw_rxif_setconf(i, &ifconf) != LGW_HAL_SUCCESS) {
             printf("ERROR: failed to configure rxif %d\n", i);
             return EXIT_FAILURE;
+        }
+    }
+
+    if (com_type == LGW_COM_SPI) {
+        /* Board reset */
+        if (reset_lgw() != LGW_HAL_SUCCESS) {
+            printf("ERROR: failed to reset SX1302\n");
+            exit(EXIT_FAILURE);
         }
     }
 

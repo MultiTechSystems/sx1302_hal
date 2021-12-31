@@ -100,7 +100,8 @@ $(OBJDIR)/%.o: src/%.c $(INCLUDES) inc/config.h | $(OBJDIR)
 
 ### static library
 
-libloragw.a: $(OBJDIR)/loragw_spi.o \
+libloragw.a: $(OBJDIR)/parson.o \
+             $(OBJDIR)/loragw_spi.o \
 			 $(OBJDIR)/loragw_usb.o \
 			 $(OBJDIR)/loragw_com.o \
 			 $(OBJDIR)/loragw_mcu.o \

@@ -23,7 +23,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #include <stdbool.h>    /* bool type */
 
 #include "loragw_com.h"
-
+#include "parson.h"
 #include "config.h"     /* library configuration options (dynamically generated) */
 
 /* -------------------------------------------------------------------------- */
@@ -134,6 +134,10 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 /* Spectral Scan */
 #define LGW_SPECTRAL_SCAN_RESULT_SIZE 33 /* The number of results returned by spectral scan function, to be used for memory allocation */
 
+/* Device Info */
+#define DEVICE_INFO_FILE "/var/run/config/device_info.json" /* File to get default device info */
+
+
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC TYPES --------------------------------------------------------- */
 
@@ -151,6 +155,16 @@ typedef enum {
 } lgw_radio_type_t;
 
 /**
+@struct enum hardware_type_e
+@brief hardware type
+*/
+typedef enum hardware_type_e {
+    HW_MTCDT,
+    HW_MTCAP,
+    HW_UNKNOWN,
+} hardware_type_t;
+
+/**
 @struct lgw_conf_board_s
 @brief Configuration structure for board specificities
 */
@@ -160,6 +174,8 @@ struct lgw_conf_board_s {
     bool            full_duplex;    /*!> Indicates if the gateway operates in full duplex mode or not */
     lgw_com_type_t  com_type;       /*!> The COMmunication interface (SPI/USB) to connect to the SX1302 */
     char            com_path[64];   /*!> Path to access the COM device to connect to the SX1302 */
+    uint8_t         tmp102;         /*!> Tmp 102 address */
+    hardware_type_t hardware_type;  /*!> Board hardware type */
 };
 
 /**
@@ -403,6 +419,12 @@ typedef enum lgw_spectral_scan_status_e {
 
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC FUNCTIONS PROTOTYPES ------------------------------------------ */
+/**
+@brief Get default paths from device info json
+@return LGW_HAL_ERROR id the operation failed, LGW_HAL_SUCCESS else
+*/
+int lgw_get_default_info();
+
 /**
 @brief reset the lgw
 @return LGW_HAL_ERROR id the operation failed, LGW_HAL_SUCCESS else

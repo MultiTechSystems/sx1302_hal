@@ -22,7 +22,6 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 
 #include "loragw_i2c.h"
 #include "loragw_stts751.h"
-
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE MACROS ------------------------------------------------------- */
 

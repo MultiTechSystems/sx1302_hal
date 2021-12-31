@@ -94,6 +94,9 @@ int main(int argc, char **argv)
     struct lgw_conf_rxrf_s rfconf;
     struct lgw_conf_sx1261_s sx1261conf;
 
+    memset(&boardconf, 0, sizeof boardconf);
+    memset(&sx1261conf, 0, sizeof sx1261conf);
+
     /* COM interface */
     const char com_path_default[] = COM_PATH_DEFAULT;
     const char * com_path = com_path_default;
@@ -133,11 +136,13 @@ int main(int argc, char **argv)
                 break;
 
             case 'd':
-                com_path = optarg;
+                strncpy(boardconf.com_path, optarg, sizeof boardconf.com_path);
+                boardconf.com_path[sizeof boardconf.com_path - 1] = '\0'; /* ensure string termination */
                 break;
 
             case 'D':
-                sx1261_path = optarg;
+                strncpy(sx1261conf.spi_path, optarg, sizeof sx1261conf.spi_path);
+                sx1261conf.spi_path[sizeof sx1261conf.spi_path - 1] = '\0'; /* ensure string termination */
                 break;
 
             case 'f': /* <float> Scan start frequency, in MHz */
@@ -213,16 +218,7 @@ int main(int argc, char **argv)
     printf("== Spectral Scan: freq_hz=%uHz, nb_channels=%u, nb_scan=%u, rssi_offset=%ddB\n", freq_hz, nb_channels, nb_scan, rssi_offset);
     printf("==\n");
 
-    if (com_type == LGW_COM_SPI) {
-        /* Board reset */
-        if (reset_lgw() != LGW_HAL_SUCCESS) {
-            printf("ERROR: failed to reset SX1302\n");
-            exit(EXIT_FAILURE);
-        }
-    }
-
     /* Configure the gateway */
-    memset(&boardconf, 0, sizeof boardconf);
     boardconf.lorawan_public = true;
     boardconf.clksrc = DEFAULT_CLK_SRC;
     boardconf.full_duplex = false;
@@ -257,15 +253,20 @@ int main(int argc, char **argv)
     }
 
     /* Configure the sx1261 for spectral scan */
-    memset(&sx1261conf, 0, sizeof sx1261conf);
     sx1261conf.enable = true;
-    strncpy(sx1261conf.spi_path, sx1261_path, sizeof sx1261conf.spi_path);
-    sx1261conf.spi_path[sizeof sx1261conf.spi_path - 1] = '\0'; /* ensure string termination */
     sx1261conf.rssi_offset = rssi_offset;
     sx1261conf.lbt_conf.enable = false;
     if (lgw_sx1261_setconf(&sx1261conf) != LGW_HAL_SUCCESS) {
         printf("ERROR: failed to configure sx1261\n");
         return EXIT_FAILURE;
+    }
+
+    if (com_type == LGW_COM_SPI) {
+        /* Board reset */
+        if (reset_lgw() != LGW_HAL_SUCCESS) {
+            printf("ERROR: failed to reset SX1302\n");
+            exit(EXIT_FAILURE);
+        }
     }
 
     /* Start the gateway, initialize sx1261 radio for scanning */

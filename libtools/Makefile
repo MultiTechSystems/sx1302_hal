@@ -16,11 +16,10 @@ INCLUDES = $(wildcard inc/*.h)
 
 ### general build targets
 
-all: libtinymt32.a libparson.a libbase64.a
+all: libtinymt32.a libbase64.a
 
 clean:
 	rm -f libtinymt32.a
-	rm -f libparson.a
 	rm -f libbase64.a
 	rm -f $(OBJDIR)/*.o
 
@@ -35,9 +34,6 @@ $(OBJDIR)/%.o: src/%.c $(INCLUDES) | $(OBJDIR)
 ### static library
 
 libtinymt32.a:  $(OBJDIR)/tinymt32.o
-	$(AR) rcs $@ $^
-
-libparson.a:  $(OBJDIR)/parson.o
 	$(AR) rcs $@ $^
 
 libbase64.a:  $(OBJDIR)/base64.o

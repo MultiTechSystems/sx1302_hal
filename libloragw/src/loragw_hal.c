@@ -75,6 +75,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define CONTEXT_COM_TYPE        lgw_context.board_cfg.com_type
 #define CONTEXT_COM_PATH        lgw_context.board_cfg.com_path
 #define CONTEXT_LWAN_PUBLIC     lgw_context.board_cfg.lorawan_public
+#define CONTEXT_HARDWARE        lgw_context.board_cfg.hardware_type
 #define CONTEXT_BOARD           lgw_context.board_cfg
 #define CONTEXT_RF_CHAIN        lgw_context.rf_chain_cfg
 #define CONTEXT_IF_CHAIN        lgw_context.if_chain_cfg
@@ -127,6 +128,8 @@ static lgw_context_t lgw_context = {
     .board_cfg.lorawan_public = true,
     .board_cfg.clksrc = 0,
     .board_cfg.full_duplex = false,
+    .board_cfg.tmp102 = 0x48,
+    .board_cfg.hardware_type = HW_UNKNOWN,
     .rf_chain_cfg = {{0}},
     .if_chain_cfg = {{0}},
     .demod_cfg = {
@@ -212,23 +215,17 @@ static int     ad_fd = -1;
 /* LGW reset command lists per accessory port */
 static char *accessory_port_default[4] = {
     "mts-io-sysfs store lora/reset 1",
-    "mts-io-sysfs store lora/reset 0",
-    "mts-io-sysfs store lora/lbtreset 1",
-    "mts-io-sysfs store lora/lbtreset 0"
+    "mts-io-sysfs store lora/reset 0"
 };
 
 static char *accessory_port_1[4] = {
     "mts-io-sysfs store ap1/reset 1",
-    "mts-io-sysfs store ap1/reset 0",
-    "mts-io-sysfs store ap1/lbtreset 1",
-    "mts-io-sysfs store ap1/lbtreset 0"
+    "mts-io-sysfs store ap1/reset 0"
 };
 
 static char *accessory_port_2[4] = {
     "mts-io-sysfs store ap2/reset 1",
-    "mts-io-sysfs store ap2/reset 0",
-    "mts-io-sysfs store ap2/lbtreset 1",
-    "mts-io-sysfs store ap2/lbtreset 0"
+    "mts-io-sysfs store ap2/reset 0"
 };
 
 
@@ -471,9 +468,69 @@ static int merge_packets(struct lgw_pkt_rx_s * p, uint8_t * nb_pkt) {
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC FUNCTIONS DEFINITION ------------------------------------------ */
 
+
+int lgw_get_default_info() {
+    int i, j, number;
+    char param_name[32]; /* used to generate variable parameter names */
+    const char *spiPath; /* used to store string value from JSON object */
+    const char *spiPath1261; /* used to store string value from JSON object */
+    const char *hwVersion; /* used to store string value from JSON object */
+    const char conf_obj_name[] = "accessoryCards";
+    JSON_Value *root_val;
+    JSON_Object *conf_obj = NULL;
+    JSON_Array *conf_array = NULL;
+    JSON_Object *conf_obj_array = NULL;
+    uint8_t tmp102 = 0;
+    /* try to parse JSON */
+    root_val = json_parse_file_with_comments(DEVICE_INFO_FILE);
+    if (root_val == NULL) {
+        printf("ERROR: %s is not a valid JSON file\n", DEVICE_INFO_FILE);
+        return LGW_HAL_ERROR;
+    }
+
+    conf_obj = json_value_get_object(root_val);
+
+    if (conf_obj == NULL) {
+        printf("INFO: does not contain a JSON object named \n" );
+        json_value_free(root_val);
+        return LGW_HAL_ERROR;
+    }
+
+    conf_array = json_object_get_array (conf_obj, "accessoryCards");
+
+    uint8_t accessory_port_size = 0;
+
+    if (conf_array != NULL) {
+        accessory_port_size = json_array_get_count(conf_array);
+        if (accessory_port_size >= 1) {
+            conf_obj_array = json_array_get_object(conf_array, 0);
+            spiPath = json_object_get_string(conf_obj_array, "spiPath");
+            spiPath1261 = json_object_get_string(conf_obj_array, "spiPath1261");
+            hwVersion = json_object_get_string(conf_obj_array, "hwVersion");
+            tmp102 = json_object_get_number(conf_obj_array, "tmp102");
+
+            if (spiPath != NULL && spiPath1261 != NULL && hwVersion != 0 && tmp102 != 0) {
+                strcpy(lgw_context.board_cfg.com_path, spiPath);
+                strcpy(lgw_context.sx1261_cfg.spi_path, spiPath1261);
+                lgw_context.board_cfg.tmp102 = tmp102;
+                if (strstr(hwVersion, "MTCAP")) {
+                    lgw_context.board_cfg.hardware_type = HW_MTCAP;
+                } else if (strstr(hwVersion, "MTAC")) {
+                    lgw_context.board_cfg.hardware_type = HW_MTCDT;
+                }
+                printf("Default info succedd\n");
+                return LGW_HAL_SUCCESS;
+            }
+        }
+    }
+
+    printf("ERROR: Unable to get default spi paths from device_info.json\n");
+    return LGW_HAL_ERROR;
+}
+
 int reset_lgw() {
     char **accessory_port;
-    if (strcmp(CONTEXT_COM_PATH, "/dev/spidev0.0") == 0) {
+    if (strcmp(CONTEXT_COM_PATH, "/dev/spidev0.0") == 0 || CONTEXT_HARDWARE == HW_MTCAP) {
         accessory_port = &accessory_port_default[0];
     } else if (strcmp(CONTEXT_COM_PATH, "/dev/spidev1.0") == 0) {
         accessory_port = &accessory_port_2[0];
@@ -481,11 +538,11 @@ int reset_lgw() {
         return LGW_HAL_ERROR;
     }
 
-    for(int i = 0; i < 4; i++) {
+    for(int i = 0; i < 2; i++) {
         if (system(accessory_port[i]) != 0) {
             return LGW_HAL_ERROR;
         }
-        usleep( 100000 ); /* 100 ms */
+        usleep( 1000000 ); /* 1000 ms */
     }
     return LGW_HAL_SUCCESS;
 }
@@ -505,13 +562,17 @@ int lgw_board_setconf(struct lgw_conf_board_s * conf) {
         return LGW_HAL_ERROR;
     }
 
+    lgw_get_default_info();
+
     /* set internal config according to parameters */
     CONTEXT_LWAN_PUBLIC = conf->lorawan_public;
     CONTEXT_BOARD.clksrc = conf->clksrc;
     CONTEXT_BOARD.full_duplex = conf->full_duplex;
     CONTEXT_COM_TYPE = conf->com_type;
-    strncpy(CONTEXT_COM_PATH, conf->com_path, sizeof CONTEXT_COM_PATH);
-    CONTEXT_COM_PATH[sizeof CONTEXT_COM_PATH - 1] = '\0'; /* ensure string termination */
+    if (conf->com_path[0] != '\0') {
+        strncpy(CONTEXT_COM_PATH, conf->com_path, sizeof CONTEXT_COM_PATH);
+        CONTEXT_COM_PATH[sizeof CONTEXT_COM_PATH - 1] = '\0'; /* ensure string termination */
+    }
 
     DEBUG_PRINTF("Note: board configuration: com_type: %s, com_path: %s, lorawan_public:%d, clksrc:%d, full_duplex:%d\n",   (CONTEXT_COM_TYPE == LGW_COM_SPI) ? "SPI" : "USB",
                                                                                                                             CONTEXT_COM_PATH,
@@ -834,8 +895,10 @@ int lgw_sx1261_setconf(struct lgw_conf_sx1261_s * conf) {
 
     /* Set the SX1261 global conf */
     CONTEXT_SX1261.enable = conf->enable;
-    strncpy(CONTEXT_SX1261.spi_path, conf->spi_path, sizeof CONTEXT_SX1261.spi_path);
-    CONTEXT_SX1261.spi_path[sizeof CONTEXT_SX1261.spi_path - 1] = '\0'; /* ensure string termination */
+    if (conf->spi_path[0] != '\0') {
+        strncpy(CONTEXT_SX1261.spi_path, conf->spi_path, sizeof CONTEXT_SX1261.spi_path);
+        CONTEXT_SX1261.spi_path[sizeof CONTEXT_SX1261.spi_path - 1] = '\0'; /* ensure string termination */
+    }
     CONTEXT_SX1261.rssi_offset = conf->rssi_offset;
 
     /* Set the LBT conf */
@@ -1135,9 +1198,9 @@ int lgw_start(void) {
     dbg_init_random();
 
     if (CONTEXT_COM_TYPE == LGW_COM_SPI) {
-        /* Find the temperature sensor on the known supported ports */
-        for (i = 0; i < (int)(sizeof I2C_PORT_TEMP_SENSOR); i++) {
-            ts_addr = I2C_PORT_TEMP_SENSOR[i];
+        if (CONTEXT_HARDWARE != HW_MTCAP) {
+            /* Find the temperature sensor on the known supported ports */
+            ts_addr = CONTEXT_BOARD.tmp102;
             err = i2c_linuxdev_open(I2C_DEVICE, ts_addr, &ts_fd);
             if (err != LGW_I2C_SUCCESS) {
                 printf("ERROR: failed to open I2C for temperature sensor on port 0x%02X\n", ts_addr);
@@ -1151,14 +1214,8 @@ int lgw_start(void) {
                 ts_fd = -1;
             } else {
                 printf("INFO: found temperature sensor on port 0x%02X\n", ts_addr);
-                break;
             }
         }
-        if (i == sizeof I2C_PORT_TEMP_SENSOR) {
-            printf("ERROR: no temperature sensor found.\n");
-            return LGW_HAL_ERROR;
-        }
-
         /* Configure ADC AD338R for full duplex (CN490 reference design) */
         if (CONTEXT_BOARD.full_duplex == true) {
             err = i2c_linuxdev_open(I2C_DEVICE, I2C_PORT_DAC_AD5338R, &ad_fd);
@@ -1264,11 +1321,13 @@ int lgw_stop(void) {
     }
 
     if (CONTEXT_COM_TYPE == LGW_COM_SPI) {
-        DEBUG_MSG("INFO: Closing I2C for temperature sensor\n");
-        x = i2c_linuxdev_close(ts_fd);
-        if (x != 0) {
-            printf("ERROR: failed to close I2C temperature sensor device (err=%i)\n", x);
-            err = LGW_HAL_ERROR;
+        if (CONTEXT_HARDWARE != HW_MTCAP) {
+            DEBUG_MSG("INFO: Closing I2C for temperature sensor\n");
+            x = i2c_linuxdev_close(ts_fd);
+            if (x != 0) {
+                printf("ERROR: failed to close I2C temperature sensor device (err=%i)\n", x);
+                err = LGW_HAL_ERROR;
+            }
         }
 
         if (CONTEXT_BOARD.full_duplex == true) {
@@ -1632,21 +1691,34 @@ int lgw_get_eui(uint64_t* eui) {
 
 int lgw_get_temperature(float* temperature) {
     int err = LGW_HAL_ERROR;
-
+    float temp;
     DEBUG_PRINTF(" --- %s\n", "IN");
 
     CHECK_NULL(temperature);
 
-    switch (CONTEXT_COM_TYPE) {
-        case LGW_COM_SPI:
-            err = spi_com_get_temperature(ts_fd, ts_addr, temperature);
-            break;
-        case LGW_COM_USB:
-            err = lgw_com_get_temperature(temperature);
-            break;
-        default:
-            printf("ERROR(%s:%d): wrong communication type (SHOULD NOT HAPPEN)\n", __FUNCTION__, __LINE__);
-            break;
+    if (CONTEXT_HARDWARE == HW_MTCAP) {
+        FILE *fptr;
+        if ((fptr = fopen("/sys/class/hwmon/hwmon0/temp1_input","r")) == NULL){
+            printf("Error: Unable to Open tmp102 file\n");
+            err = LGW_HAL_ERROR;
+        } else {
+            fscanf(fptr,"%f", &temp);
+            *temperature = temp/1000.0; // hwmon file stores temperature in millicelsius
+            fclose(fptr);
+            err = LGW_HAL_SUCCESS;
+        }
+    } else {
+        switch (CONTEXT_COM_TYPE) {
+            case LGW_COM_SPI:
+                err = spi_com_get_temperature(ts_fd, ts_addr, temperature);
+                break;
+            case LGW_COM_USB:
+                err = lgw_com_get_temperature(temperature);
+                break;
+            default:
+                printf("ERROR(%s:%d): wrong communication type (SHOULD NOT HAPPEN)\n", __FUNCTION__, __LINE__);
+                break;
+        }
     }
 
     DEBUG_PRINTF(" --- %s\n", "OUT");

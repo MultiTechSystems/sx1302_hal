@@ -45,7 +45,6 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 /* --- PRIVATE CONSTANTS ---------------------------------------------------- */
 
 #define COM_TYPE_DEFAULT LGW_COM_SPI
-#define COM_PATH_DEFAULT "/dev/spidev0.0"
 
 #define DEFAULT_CLK_SRC     0
 #define DEFAULT_FREQ_HZ     868500000U
@@ -67,7 +66,6 @@ void usage(void) {
     printf(" -h print this help\n");
     printf(" -u         Set COM type as USB (default is SPI)\n");
     printf(" -d <path>  COM path to be used to connect the concentrator\n");
-    printf("            => default path: " COM_PATH_DEFAULT "\n");
     printf(" -k <uint>  Concentrator clock source (Radio A or Radio B) [0..1]\n");
     printf(" -c <uint>  RF chain to be used for TX (Radio A or Radio B) [0..1]\n");
     printf(" -r <uint>  Radio type (1255, 1257, 1250)\n");
@@ -151,9 +149,9 @@ int main(int argc, char **argv)
     uint32_t trig_delay_us = 1000000;
     bool trig_delay = false;
 
+    memset( &boardconf, 0, sizeof boardconf);
+
     /* SPI interfaces */
-    const char com_path_default[] = COM_PATH_DEFAULT;
-    const char * com_path = com_path_default;
     lgw_com_type_t com_type = COM_TYPE_DEFAULT;
 
     static struct sigaction sigact; /* SIGQUIT&SIGINT&SIGTERM signal handling */
@@ -190,7 +188,8 @@ int main(int argc, char **argv)
                 break;
             case 'd': /* <char> COM path */
                 if (optarg != NULL) {
-                    com_path = optarg;
+                    strncpy(boardconf.com_path, optarg, sizeof boardconf.com_path);
+                    boardconf.com_path[sizeof boardconf.com_path - 1] = '\0'; /* ensure string termination */
                 }
                 break;
             case 'i': /* Send packet using inverted modulation polarity */
@@ -436,13 +435,10 @@ int main(int argc, char **argv)
     sigaction( SIGTERM, &sigact, NULL );
 
     /* Configure the gateway */
-    memset( &boardconf, 0, sizeof boardconf);
     boardconf.lorawan_public = true;
     boardconf.clksrc = clocksource;
     boardconf.full_duplex = full_duplex;
     boardconf.com_type = com_type;
-    strncpy(boardconf.com_path, com_path, sizeof boardconf.com_path);
-    boardconf.com_path[sizeof boardconf.com_path - 1] = '\0'; /* ensure string termination */
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
         printf("ERROR: failed to configure board\n");
         return EXIT_FAILURE;

@@ -40,7 +40,6 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 /* --- PRIVATE MACROS ------------------------------------------------------- */
 
 #define COM_TYPE_DEFAULT LGW_COM_SPI
-#define COM_PATH_DEFAULT "/dev/spidev0.0"
 
 #define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 #define RAND_RANGE(min, max) (rand() % (max + 1 - min) + min)
@@ -73,7 +72,6 @@ void usage(void) {
     printf(" -h print this help\n");
     printf(" -u            set COM type as USB (default is SPI)\n");
     printf(" -d <path>     COM path to be used to connect the concentrator\n");
-    printf("               => default path: " COM_PATH_DEFAULT "\n");
     printf(" -k <uint>     Concentrator clock source (Radio A or Radio B) [0..1]\n");
     printf(" -r <uint>     Radio type (1255, 1257, 1250)\n");
     printf(" -a <float>    Radio A RX frequency in MHz\n");
@@ -93,8 +91,6 @@ void usage(void) {
 int main(int argc, char **argv)
 {
     /* SPI interfaces */
-    const char com_path_default[] = COM_PATH_DEFAULT;
-    const char * com_path = com_path_default;
     lgw_com_type_t com_type = COM_TYPE_DEFAULT;
 
     struct sigaction sigact; /* SIGQUIT&SIGINT&SIGTERM signal handling */
@@ -114,6 +110,8 @@ int main(int argc, char **argv)
     struct lgw_conf_board_s boardconf;
     struct lgw_conf_rxrf_s rfconf;
     struct lgw_conf_rxif_s ifconf;
+
+    memset( &boardconf, 0, sizeof boardconf);
 
     unsigned long nb_pkt_crc_ok = 0, nb_loop = 0, cnt_loop;
     int nb_pkt;
@@ -164,7 +162,8 @@ int main(int argc, char **argv)
                 break;
             case 'd': /* <char> COM path */
                 if (optarg != NULL) {
-                    com_path = optarg;
+                    strncpy(boardconf.com_path, optarg, sizeof boardconf.com_path);
+                    boardconf.com_path[sizeof boardconf.com_path - 1] = '\0'; /* ensure string termination */
                 }
                 break;
             case 'u': /* Configure USB connection type */
@@ -281,13 +280,10 @@ int main(int argc, char **argv)
     printf("===== sx1302 HAL RX test =====\n");
 
     /* Configure the gateway */
-    memset( &boardconf, 0, sizeof boardconf);
     boardconf.lorawan_public = true;
     boardconf.clksrc = clocksource;
     boardconf.full_duplex = full_duplex;
     boardconf.com_type = com_type;
-    strncpy(boardconf.com_path, com_path, sizeof boardconf.com_path);
-    boardconf.com_path[sizeof boardconf.com_path - 1] = '\0'; /* ensure string termination */
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
         printf("ERROR: failed to configure board\n");
         return EXIT_FAILURE;
