@@ -518,7 +518,6 @@ int lgw_get_default_info() {
                 } else if (strstr(hwVersion, "MTAC")) {
                     lgw_context.board_cfg.hardware_type = HW_MTCDT;
                 }
-                printf("Default info succedd\n");
                 return LGW_HAL_SUCCESS;
             }
         }
