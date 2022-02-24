@@ -577,6 +577,13 @@ static int parse_SX130x_configuration(const char * conf_file) {
         MSG("ERROR: com_path must be configured in %s\n", conf_file);
         return -1;
     }
+    val = json_object_get_value(conf_obj, "tmp102"); /* fetch value (if possible) */
+    if (val != NULL && json_value_get_type(val) == JSONNumber) {
+        boardconf.tmp102 = (uint8_t)json_value_get_number(val);
+    } else {
+        MSG("ERROR: tmp102 must be configured in %s\n", conf_file);
+        return -1;
+    }
     val = json_object_get_value(conf_obj, "lorawan_public"); /* fetch value (if possible) */
     if (json_value_get_type(val) == JSONBoolean) {
         boardconf.lorawan_public = (bool)json_value_get_boolean(val);
@@ -598,7 +605,7 @@ static int parse_SX130x_configuration(const char * conf_file) {
         MSG("WARNING: Data type for full_duplex seems wrong, please check\n");
         boardconf.full_duplex = false;
     }
-    MSG("INFO: com_type %s, com_path %s, lorawan_public %d, clksrc %d, full_duplex %d\n", (boardconf.com_type == LGW_COM_SPI) ? "SPI" : "USB", boardconf.com_path, boardconf.lorawan_public, boardconf.clksrc, boardconf.full_duplex);
+    MSG("INFO: com_type %s, com_path %s, tmp102 0x%02X lorawan_public %d, clksrc %d, full_duplex %d\n", (boardconf.com_type == LGW_COM_SPI) ? "SPI" : "USB", boardconf.com_path, boardconf.tmp102, boardconf.lorawan_public, boardconf.clksrc, boardconf.full_duplex);
     /* all parameters parsed, submitting configuration to the HAL */
     if (lgw_board_setconf(&boardconf) != LGW_HAL_SUCCESS) {
         MSG("ERROR: Failed to configure board\n");
@@ -1914,7 +1921,7 @@ int main(int argc, char ** argv)
 
     if (com_type == LGW_COM_SPI) {
         /* Board reset */
-        if (reset_lgw() != LGW_HAL_SUCCESS) {
+        if (reset_lgw_start() != LGW_HAL_SUCCESS) {
             printf("ERROR: failed to reset SX1302\n");
             exit(EXIT_FAILURE);
         }
@@ -2218,7 +2225,7 @@ int main(int argc, char ** argv)
 
     if (com_type == LGW_COM_SPI) {
         /* Board reset */
-        if (reset_lgw() != LGW_HAL_SUCCESS) {
+        if (reset_lgw_stop() != LGW_HAL_SUCCESS) {
             printf("ERROR: failed to reset SX1302\n");
             exit(EXIT_FAILURE);
         }

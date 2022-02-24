@@ -74,6 +74,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define CONTEXT_STARTED         lgw_context.is_started
 #define CONTEXT_COM_TYPE        lgw_context.board_cfg.com_type
 #define CONTEXT_COM_PATH        lgw_context.board_cfg.com_path
+#define CONTEXT_TMP102          lgw_context.board_cfg.tmp102
 #define CONTEXT_LWAN_PUBLIC     lgw_context.board_cfg.lorawan_public
 #define CONTEXT_HARDWARE        lgw_context.board_cfg.hardware_type
 #define CONTEXT_BOARD           lgw_context.board_cfg
@@ -215,17 +216,16 @@ static int     ad_fd = -1;
 /* LGW reset command lists per accessory port */
 static char *accessory_port_default[4] = {
     "mts-io-sysfs store lora/reset 1",
-    "mts-io-sysfs store lora/reset 0"
-};
-
-static char *accessory_port_1[4] = {
-    "mts-io-sysfs store ap1/reset 1",
-    "mts-io-sysfs store ap1/reset 0"
+    "mts-io-sysfs store lora/reset 0",
+    "mts-io-sysfs store lora/nreset 0",
+    "mts-io-sysfs store lora/nreset 1"
 };
 
 static char *accessory_port_2[4] = {
     "mts-io-sysfs store ap2/reset 1",
-    "mts-io-sysfs store ap2/reset 0"
+    "mts-io-sysfs store ap2/reset 0",
+    "mts-io-sysfs store ap2/nreset 0",
+    "mts-io-sysfs store ap2/nreset 1"
 };
 
 
@@ -465,6 +465,46 @@ static int merge_packets(struct lgw_pkt_rx_s * p, uint8_t * nb_pkt) {
     return 0;
 }
 
+static int reset_lgw(int start) {
+    struct stat buffer;
+    if (stat("reset_lgw.sh", &buffer) == 0) {
+        printf("INFO: Found reset_lgw.sh\n");
+        if (start == 1) {
+            if (system("./reset_lgw.sh start") != 0) {
+                printf("ERROR: reset_lgw.sh failed, check your script\n");
+                return LGW_HAL_ERROR;
+            } else {
+                return LGW_HAL_SUCCESS;
+            }
+        } else if (start == 0) {
+            if (system("./reset_lgw.sh stop") != 0) {
+                printf("ERROR: reset_lgw.sh failed, check your script\n");
+                return LGW_HAL_ERROR;
+            } else {
+                return LGW_HAL_SUCCESS;
+            }
+        }
+    } else {
+        printf("INFO: No reset_lgw.sh found, running default reset procedure\n");
+        char **accessory_port;
+        if (strcmp(CONTEXT_COM_PATH, "/dev/spidev0.0") == 0 || CONTEXT_HARDWARE == HW_MTCAP) {
+            accessory_port = &accessory_port_default[0];
+        } else if (strcmp(CONTEXT_COM_PATH, "/dev/spidev1.0") == 0) {
+            accessory_port = &accessory_port_2[0];
+        } else {
+            return LGW_HAL_ERROR;
+        }
+
+        for(int i = 0; i < 2; i++) {
+            if (system(accessory_port[i]) != 0) {
+                return LGW_HAL_ERROR;
+            }
+            usleep( 1000000 ); /* 1000 ms */
+        }
+        return LGW_HAL_SUCCESS;
+    }
+}
+
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC FUNCTIONS DEFINITION ------------------------------------------ */
 
@@ -527,23 +567,12 @@ int lgw_get_default_info() {
     return LGW_HAL_ERROR;
 }
 
-int reset_lgw() {
-    char **accessory_port;
-    if (strcmp(CONTEXT_COM_PATH, "/dev/spidev0.0") == 0 || CONTEXT_HARDWARE == HW_MTCAP) {
-        accessory_port = &accessory_port_default[0];
-    } else if (strcmp(CONTEXT_COM_PATH, "/dev/spidev1.0") == 0) {
-        accessory_port = &accessory_port_2[0];
-    } else {
-        return LGW_HAL_ERROR;
-    }
+int reset_lgw_start() {
+    return reset_lgw(1);
+}
 
-    for(int i = 0; i < 2; i++) {
-        if (system(accessory_port[i]) != 0) {
-            return LGW_HAL_ERROR;
-        }
-        usleep( 1000000 ); /* 1000 ms */
-    }
-    return LGW_HAL_SUCCESS;
+int reset_lgw_stop() {
+    return reset_lgw(0);
 }
 
 int lgw_board_setconf(struct lgw_conf_board_s * conf) {
@@ -572,7 +601,9 @@ int lgw_board_setconf(struct lgw_conf_board_s * conf) {
         strncpy(CONTEXT_COM_PATH, conf->com_path, sizeof CONTEXT_COM_PATH);
         CONTEXT_COM_PATH[sizeof CONTEXT_COM_PATH - 1] = '\0'; /* ensure string termination */
     }
-
+    if (conf->tmp102 != 0) {
+        CONTEXT_TMP102 = conf->tmp102;
+    }
     DEBUG_PRINTF("Note: board configuration: com_type: %s, com_path: %s, lorawan_public:%d, clksrc:%d, full_duplex:%d\n",   (CONTEXT_COM_TYPE == LGW_COM_SPI) ? "SPI" : "USB",
                                                                                                                             CONTEXT_COM_PATH,
                                                                                                                             CONTEXT_LWAN_PUBLIC,

@@ -125,7 +125,7 @@ int main(int argc, char ** argv)
 
     /* Board reset */
     if (com_type == LGW_COM_SPI) {
-        if (reset_lgw() != LGW_HAL_SUCCESS) {
+        if (reset_lgw_start() != LGW_HAL_SUCCESS) {
             printf("ERROR: failed to reset SX1302\n");
             exit(EXIT_FAILURE);
         }
@@ -373,7 +373,7 @@ int main(int argc, char ** argv)
 
     if (com_type == LGW_COM_SPI) {
         /* Board reset */
-        if (reset_lgw() != LGW_HAL_SUCCESS) {
+        if (reset_lgw_stop() != LGW_HAL_SUCCESS) {
             printf("ERROR: failed to reset SX1302\n");
             exit(EXIT_FAILURE);
         }

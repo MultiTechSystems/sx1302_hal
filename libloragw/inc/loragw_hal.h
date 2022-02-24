@@ -21,6 +21,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 
 #include <stdint.h>     /* C99 types */
 #include <stdbool.h>    /* bool type */
+#include <sys/stat.h>
 
 #include "loragw_com.h"
 #include "parson.h"
@@ -426,11 +427,16 @@ typedef enum lgw_spectral_scan_status_e {
 int lgw_get_default_info();
 
 /**
-@brief reset the lgw
+@brief reset the lgw and export pins
 @return LGW_HAL_ERROR id the operation failed, LGW_HAL_SUCCESS else
 */
-int reset_lgw();
+int reset_lgw_start();
 
+/**
+@brief reset the lgw and unexport pins
+@return LGW_HAL_ERROR id the operation failed, LGW_HAL_SUCCESS else
+*/
+int reset_lgw_start();
 /**
 @brief Configure the gateway board
 @param conf structure containing the configuration parameters
