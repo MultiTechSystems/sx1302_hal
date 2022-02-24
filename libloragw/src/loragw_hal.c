@@ -214,18 +214,18 @@ static uint8_t ts_addr = 0xFF;
 static int     ad_fd = -1;
 
 /* LGW reset command lists per accessory port */
-static char *accessory_port_default[4] = {
-    "mts-io-sysfs store lora/reset 1",
+static char *accessory_port_default[RESET_COMMAND_LIST_SIZE] = {
+    "mts-io-sysfs store lora/creset 1",
+    "mts-io-sysfs store lora/creset 0",
     "mts-io-sysfs store lora/reset 0",
-    "mts-io-sysfs store lora/nreset 0",
-    "mts-io-sysfs store lora/nreset 1"
+    "mts-io-sysfs store lora/reset 1"
 };
 
-static char *accessory_port_2[4] = {
-    "mts-io-sysfs store ap2/reset 1",
+static char *accessory_port_2[RESET_COMMAND_LIST_SIZE] = {
+    "mts-io-sysfs store ap2/creset 1",
+    "mts-io-sysfs store ap2/creset 0",
     "mts-io-sysfs store ap2/reset 0",
-    "mts-io-sysfs store ap2/nreset 0",
-    "mts-io-sysfs store ap2/nreset 1"
+    "mts-io-sysfs store ap2/reset 1"
 };
 
 
@@ -494,8 +494,7 @@ static int reset_lgw(int start) {
         } else {
             return LGW_HAL_ERROR;
         }
-
-        for(int i = 0; i < 2; i++) {
+        for(int i = 0; i < RESET_COMMAND_LIST_SIZE; i++) {
             if (system(accessory_port[i]) != 0) {
                 return LGW_HAL_ERROR;
             }

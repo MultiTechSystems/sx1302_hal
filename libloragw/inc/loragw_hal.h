@@ -138,7 +138,8 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 /* Device Info */
 #define DEVICE_INFO_FILE "/var/run/config/device_info.json" /* File to get default device info */
 
-
+/* Reset command array size*/
+#define RESET_COMMAND_LIST_SIZE 4
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC TYPES --------------------------------------------------------- */
 
