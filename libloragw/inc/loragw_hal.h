@@ -436,7 +436,7 @@ int reset_lgw_start();
 @brief reset the lgw and unexport pins
 @return LGW_HAL_ERROR id the operation failed, LGW_HAL_SUCCESS else
 */
-int reset_lgw_start();
+int reset_lgw_stop();
 /**
 @brief Configure the gateway board
 @param conf structure containing the configuration parameters
