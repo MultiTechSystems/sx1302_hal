@@ -624,44 +624,44 @@ static int parse_SX130x_configuration(const char * conf_file) {
     }
     MSG("INFO: antenna_gain %d dBi\n", antenna_gain);
 
-    conf_temp_comp_obj = json_object_get_object(conf_obj, "temperature_comp"); /* fetch value (if possible) */
-    if (conf_temp_comp_obj == NULL) {
-        MSG("INFO: Default Temperature Compensation\n");
-        strncpy(temp_comp_file, DEFAULT_TEMP_COMP_FILE, sizeof(temp_comp_file)-1);
-    } else {
-        val = json_object_get_value(conf_temp_comp_obj, "enable"); /* fetch value (if possible) */
-        if (json_value_get_type(val) == JSONBoolean) {
-            temp_comp_enabled = (bool)json_value_get_boolean(val);
-        }
+    //  conf_temp_comp_obj = json_object_get_object(conf_obj, "temperature_comp"); /* fetch value (if possible) */
+    // if (conf_temp_comp_obj == NULL) {
+    //     MSG("INFO: Default Temperature Compensation\n");
+    strncpy(temp_comp_file, DEFAULT_TEMP_COMP_FILE, sizeof(temp_comp_file)-1);
+    // } else {
+    //     val = json_object_get_value(conf_temp_comp_obj, "enable"); /* fetch value (if possible) */
+    //     if (json_value_get_type(val) == JSONBoolean) {
+    //         temp_comp_enabled = (bool)json_value_get_boolean(val);
+    //     }
 
-        if (temp_comp_enabled) {
-            MSG("INFO: Temperature Compensation enabled\n");
+    //     if (temp_comp_enabled) {
+    //         MSG("INFO: Temperature Compensation enabled\n");
 
-            /* Current temperature path (optional) */
-            str = json_object_get_string(conf_temp_comp_obj, "current_temp_file");
-            if (str != NULL) {
-                strncpy(temp_comp_file, str, sizeof(temp_comp_file)-1);
-                MSG("INFO: Current temperature file is configured to \"%s\"\n", temp_comp_file);
-            } else {
-                strncpy(temp_comp_file, DEFAULT_TEMP_COMP_FILE, sizeof(temp_comp_file)-1);
-            }
+    //         /* Current temperature path (optional) */
+    //         str = json_object_get_string(conf_temp_comp_obj, "current_temp_file");
+    //         if (str != NULL) {
+    //             strncpy(temp_comp_file, str, sizeof(temp_comp_file)-1);
+    //             MSG("INFO: Current temperature file is configured to \"%s\"\n", temp_comp_file);
+    //         } else {
+    //             strncpy(temp_comp_file, DEFAULT_TEMP_COMP_FILE, sizeof(temp_comp_file)-1);
+    //         }
 
-            /* Current temperature type (optional) */
-            str = json_object_get_string(conf_temp_comp_obj, "current_temp_type");
-            if (str != NULL) {
-                strncpy(temp_comp_type, str, sizeof(temp_comp_type)-1);
-                MSG("INFO: Current temperature file is configured to \"%s\"\n", temp_comp_type);
-            } else {
-                strncpy(temp_comp_type, DEFAULT_TEMP_COMP_TYPE, sizeof(temp_comp_type)-1);
-            }
+    //         /* Current temperature type (optional) */
+    //         str = json_object_get_string(conf_temp_comp_obj, "current_temp_type");
+    //         if (str != NULL) {
+    //             strncpy(temp_comp_type, str, sizeof(temp_comp_type)-1);
+    //             MSG("INFO: Current temperature file is configured to \"%s\"\n", temp_comp_type);
+    //         } else {
+    //             strncpy(temp_comp_type, DEFAULT_TEMP_COMP_TYPE, sizeof(temp_comp_type)-1);
+    //         }
 
-            if (strncmp(temp_comp_type, "FILE", 4) == 0) {
-                temp_comp_file_type = 1;
-            }
-        } else {
-            MSG("INFO: Temperature Compensation disabled\n");
-        }
-    }
+    //         if (strncmp(temp_comp_type, "FILE", 4) == 0) {
+    //             temp_comp_file_type = 1;
+    //         }
+    //     } else {
+    MSG("INFO: Temperature Compensation disabled\n");
+    //     }
+    // }
 
     /* set timestamp configuration */
     conf_ts_obj = json_object_get_object(conf_obj, "fine_timestamp");
@@ -3290,7 +3290,7 @@ void thread_down(void) {
             /* parse TX power (optional field) */
             val = json_object_get_value(txpk_obj,"powe");
             if (val != NULL) {
-                txpkt.rf_power = (int8_t)json_value_get_number(val) - antenna_gain;
+                pwr = (int8_t)json_value_get_number(val) - antenna_gain;
                 if (max_tx_power != -99) {
                     if (pwr > max_tx_power - antenna_gain) {
                         MSG("INFO: [down] tx power reduced tx power: % dBm attn gain: %d dBi\n", max_tx_power, antenna_gain);
