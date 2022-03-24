@@ -3558,7 +3558,7 @@ void thread_jit(void) {
     int i;
 
     while (!exit_sig && !quit_sig) {
-        wait_ms(10);
+        wait_ms(30);
 
         for (i = 0; i < LGW_RF_CHAIN_NB; i++) {
             /* transfer data and metadata to the concentrator, and schedule TX */
