@@ -45,6 +45,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #include <netdb.h>          /* gai_strerror */
 
 #include <pthread.h>
+#include <getopt.h>
 
 #include "trace.h"
 #include "jitqueue.h"
@@ -285,6 +286,8 @@ static spectral_scan_t spectral_scan_params = {
     .pace_s = 10
 };
 
+char *cli_logfile_path = NULL;
+
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE FUNCTIONS DECLARATION ---------------------------------------- */
 
@@ -487,16 +490,13 @@ static void update_temp_comp_value() {
 
 }
 
-
-
-
-static void usage( void )
-{
+static void usage(void) {
     printf("~~~ Library version string~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
     printf(" %s\n", lgw_version_info());
     printf("~~~ Available options ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
     printf(" -h  print this help\n");
     printf(" -c <filename>  use config file other than 'global_conf.json'\n");
+    printf(" -l <filename>  log output to file'\n");
     printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
 }
 
@@ -1260,6 +1260,24 @@ static int parse_SX130x_configuration(const char * conf_file) {
     return 0;
 }
 
+static int set_debug_path(const char * str) {
+    strncpy(debugconf.log_file_name, str, sizeof debugconf.log_file_name);
+    debugconf.log_file_name[sizeof debugconf.log_file_name - 1] = '\0'; /* ensure string termination */
+    MSG("INFO: setting debug log file name to %s\n", debugconf.log_file_name);
+    int logfile_fd;
+    FILE *logfile = NULL;
+    logfile = fopen(debugconf.log_file_name, "a");
+    if (logfile) {
+        logfile_fd = fileno(logfile);
+        dup2(logfile_fd, STDOUT_FILENO);
+        dup2(logfile_fd, STDERR_FILENO);
+        return 0;
+    } else {
+        printf("Error opening log file %s\n", debugconf.log_file_name);
+        exit(EXIT_FAILURE);
+    }
+}
+
 static int parse_gateway_configuration(const char * conf_file) {
     const char conf_obj_name[] = "gateway_conf";
     JSON_Value *root_val;
@@ -1508,6 +1526,11 @@ static int parse_debug_configuration(const char * conf_file) {
         exit(EXIT_FAILURE);
     }
 
+    /* If command line log file, set the log file regardless of config */
+    if (cli_logfile_path != NULL) {
+        set_debug_path(cli_logfile_path);
+    }
+
     /* point to the gateway configuration object */
     conf_obj = json_object_get_object(json_value_get_object(root_val), conf_obj_name);
     if (conf_obj == NULL) {
@@ -1538,12 +1561,10 @@ static int parse_debug_configuration(const char * conf_file) {
         }
     }
 
-    /* Get log file configuration */
+    /* Get log file configuration and set if command line does not set it */
     str = json_object_get_string(conf_obj, "log_file");
-    if (str != NULL) {
-        strncpy(debugconf.log_file_name, str, sizeof debugconf.log_file_name);
-        debugconf.log_file_name[sizeof debugconf.log_file_name - 1] = '\0'; /* ensure string termination */
-        MSG("INFO: setting debug log file name to %s\n", debugconf.log_file_name);
+    if (str != NULL && cli_logfile_path == NULL) {
+        set_debug_path(str);
     }
 
     /* Commit configuration */
@@ -1698,15 +1719,45 @@ static int send_tx_ack(uint8_t token_h, uint8_t token_l, enum jit_error_e error,
     return send(sock_down, (void *)buff_ack, buff_index, 0);
 }
 
+void sighup_handler() {
+    int logfile_fd;
+    int old_logfile_fd = -1;
+
+    FILE *logfile = NULL;
+    if (debugconf.log_file_name) {
+        logfile = fopen(debugconf.log_file_name, "a");
+
+        if (logfile) {
+            dup2(STDOUT_FILENO, old_logfile_fd);
+            logfile_fd = fileno(logfile);
+            dup2(logfile_fd, STDOUT_FILENO);
+            dup2(logfile_fd, STDERR_FILENO);
+            close(old_logfile_fd);
+        } else {
+            printf("Error opening log file %s\n", debugconf.log_file_name);
+            exit(1);
+        }
+    }
+}
+
+static char *short_options = "c:l:h";
+static struct option long_options[] = {
+        {"logfile", 1, 0, 'l'},
+        {"help", 0, 0, 'h'},
+        {0, 0, 0, 0},
+};
+
 /* -------------------------------------------------------------------------- */
 /* --- MAIN FUNCTION -------------------------------------------------------- */
 
 int main(int argc, char ** argv)
 {
     struct sigaction sigact; /* SIGQUIT&SIGINT&SIGTERM signal handling */
+    struct sigaction sighupact; /* SIGHUP signal handling */
     int i; /* loop variable and temporary variable for return value */
     int x;
     int l, m;
+    int opt_ind = 0;
 
     /* configuration file related */
     const char defaut_conf_fname[] = JSON_CONF_DEFAULT;
@@ -1773,15 +1824,19 @@ int main(int argc, char ** argv)
     float dw_ack_ratio;
 
     /* Parse command line options */
-    while( (i = getopt( argc, argv, "hc:" )) != -1 )
-    {
-        switch( i )
-        {
+    while((i = getopt_long(argc, argv, short_options, long_options, &opt_ind)) >= 0) {
+        switch(i) {
         case 'h':
             usage( );
             return EXIT_SUCCESS;
             break;
-
+        case 'l':
+            cli_logfile_path = strdup(optarg);
+            if (cli_logfile_path == NULL) {
+                printf("Error: can't save logfile name\n");
+                exit(1);
+            }
+            break;
         case 'c':
             conf_fname = optarg;
             break;
@@ -1791,6 +1846,26 @@ int main(int argc, char ** argv)
             usage( );
             return EXIT_FAILURE;
         }
+    }
+
+    /* load configuration files */
+    if (access(conf_fname, R_OK) == 0) { /* if there is a global conf, parse it  */
+        MSG("INFO: found configuration file %s, parsing it\n", conf_fname);
+        x = parse_debug_configuration(conf_fname);
+        if (x != 0) {
+            MSG("INFO: no debug configuration\n");
+        }
+        x = parse_SX130x_configuration(conf_fname);
+        if (x != 0) {
+            exit(EXIT_FAILURE);
+        }
+        x = parse_gateway_configuration(conf_fname);
+        if (x != 0) {
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        MSG("ERROR: [main] failed to find any configuration file named %s\n", conf_fname);
+        exit(EXIT_FAILURE);
     }
 
     /* display version informations */
@@ -1805,26 +1880,6 @@ int main(int argc, char ** argv)
     #else
         MSG("INFO: Host endianness unknown\n");
     #endif
-
-    /* load configuration files */
-    if (access(conf_fname, R_OK) == 0) { /* if there is a global conf, parse it  */
-        MSG("INFO: found configuration file %s, parsing it\n", conf_fname);
-        x = parse_SX130x_configuration(conf_fname);
-        if (x != 0) {
-            exit(EXIT_FAILURE);
-        }
-        x = parse_gateway_configuration(conf_fname);
-        if (x != 0) {
-            exit(EXIT_FAILURE);
-        }
-        x = parse_debug_configuration(conf_fname);
-        if (x != 0) {
-            MSG("INFO: no debug configuration\n");
-        }
-    } else {
-        MSG("ERROR: [main] failed to find any configuration file named %s\n", conf_fname);
-        exit(EXIT_FAILURE);
-    }
 
     /* Start GPS a.s.a.p., to allow it to lock */
     if (gps_tty_path[0] != '\0') { /* do not try to open GPS device if no path set */
@@ -1997,6 +2052,12 @@ int main(int argc, char ** argv)
     sigaction(SIGQUIT, &sigact, NULL); /* Ctrl-\ */
     sigaction(SIGINT, &sigact, NULL); /* Ctrl-C */
     sigaction(SIGTERM, &sigact, NULL); /* default "kill" command */
+
+    sigemptyset(&sighupact.sa_mask);
+    sighupact.sa_flags = 0;
+    sighupact.sa_handler = sighup_handler;
+    sigaction(SIGHUP, &sighupact, NULL); /* rotate logfile on HUP */
+    signal(SIGPIPE, SIG_IGN);   /* ignore writes after closing socket */
 
     /* main loop task : statistics collection */
     while (!exit_sig && !quit_sig) {
