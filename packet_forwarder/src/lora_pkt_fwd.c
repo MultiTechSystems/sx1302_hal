@@ -82,7 +82,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define PUSH_TIMEOUT_MS     100
 #define PULL_TIMEOUT_MS     200
 #define GPS_REF_MAX_AGE     30          /* maximum admitted delay in seconds of GPS loss before considering latest GPS sync unusable */
-#define FETCH_SLEEP_MS      10          /* nb of ms waited when a fetch return no packets */
+#define FETCH_SLEEP_MS      100          /* nb of ms waited when a fetch return no packets */
 #define BEACON_POLL_MS      50          /* time in ms between polling of beacon TX status */
 
 #define PROTOCOL_VERSION    2           /* v1.6 */
@@ -3619,7 +3619,7 @@ void thread_jit(void) {
     int i;
 
     while (!exit_sig && !quit_sig) {
-        wait_ms(30);
+        wait_ms(70);
 
         for (i = 0; i < LGW_RF_CHAIN_NB; i++) {
             /* transfer data and metadata to the concentrator, and schedule TX */
