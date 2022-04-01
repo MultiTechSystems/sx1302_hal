@@ -263,7 +263,7 @@ int str_chop(char *s, int buff_size, char separator, int *idx_ary, int max_idx) 
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC FUNCTIONS DEFINITION ------------------------------------------ */
 
-int lgw_gps_enable(char *tty_path, char *gps_family, speed_t target_brate, int *fd_ptr) {
+int lgw_gps_enable(char *tty_path, char *gps_family, speed_t target_brate, int *fd_ptr, int slot) {
     int i;
     int gps_tty_dev; /* file descriptor to the serial port of the GNSS module */
 
@@ -273,8 +273,10 @@ int lgw_gps_enable(char *tty_path, char *gps_family, speed_t target_brate, int *
 
     struct stat buf;
 
-    if (stat(FIFO_1_NAME, &buf) != 0) {
-        system(fifo_1_make);
+    if (slot == 1) {
+        if (stat(FIFO_1_NAME, &buf) != 0) {
+            system(fifo_1_make);
+        }
         pipe_fd = popen(fifo_1_pipe, "r");
         fifo_name = FIFO_1_NAME;
     } else {

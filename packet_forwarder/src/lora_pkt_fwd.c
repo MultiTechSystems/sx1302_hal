@@ -276,6 +276,7 @@ static uint32_t nb_pkt_received_ref[16];
 
 /* Interface type */
 static lgw_com_type_t com_type = LGW_COM_SPI;
+char* com_path;
 
 /* Spectral Scan */
 static spectral_scan_t spectral_scan_params = {
@@ -573,6 +574,7 @@ static int parse_SX130x_configuration(const char * conf_file) {
     if (str != NULL) {
         strncpy(boardconf.com_path, str, sizeof boardconf.com_path);
         boardconf.com_path[sizeof boardconf.com_path - 1] = '\0'; /* ensure string termination */
+        com_path = boardconf.com_path;
     } else {
         MSG("ERROR: com_path must be configured in %s\n", conf_file);
         return -1;
@@ -1883,7 +1885,7 @@ int main(int argc, char ** argv)
 
     /* Start GPS a.s.a.p., to allow it to lock */
     if (gps_tty_path[0] != '\0') { /* do not try to open GPS device if no path set */
-        i = lgw_gps_enable(gps_tty_path, "ubx7", 0, &gps_tty_fd); /* HAL only supports u-blox 7 for now */
+        i = lgw_gps_enable(gps_tty_path, "ubx7", 0, &gps_tty_fd, ((com_type == LGW_COM_SPI && strcmp(com_path, "/dev/spidev0.0") > 0) ? 1 : 2)); /* HAL only supports u-blox 7 for now */
         if (i != LGW_GPS_SUCCESS) {
             printf("WARNING: [main] impossible to open %s for GPS sync (check permissions)\n", gps_tty_path);
             gps_enabled = false;
