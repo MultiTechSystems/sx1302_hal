@@ -104,7 +104,7 @@ enum gps_msg {
 @param fd_ptr pointer to a variable to receive file descriptor on GPS tty
 @return success if the function was able to connect and configure a GPS module
 */
-int lgw_gps_enable(char* tty_path, char* gps_familly, speed_t target_brate, int* fd_ptr);
+int lgw_gps_enable(char* tty_path, char* gps_familly, speed_t target_brate, int* fd_ptr, int slot);
 
 /**
 @brief Restore GPS serial configuration and close serial device

@@ -259,7 +259,7 @@ int main(int argc, char **argv)
     printf("*** Library version information ***\n%s\n***\n", lgw_version_info());
 
     /* Open and configure GPS */
-    i = lgw_gps_enable("/dev/ttyS0", "ubx7", 0, &gps_tty_dev);
+    i = lgw_gps_enable("/dev/ttyS0", "ubx7", 0, &gps_tty_dev, 1);
     if (i != LGW_GPS_SUCCESS) {
         printf("ERROR: Failed to enable GPS\n");
         exit(EXIT_FAILURE);
