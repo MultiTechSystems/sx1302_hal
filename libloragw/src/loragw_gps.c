@@ -67,9 +67,11 @@ FILE* pipe_fd;
 
 char fifo_1_make[] = "mkfifo " FIFO_1_NAME;
 char fifo_1_pipe[] = "gpspipe -R -r -o " FIFO_1_NAME;
+char fifo_1_kill[] = "pkill -f \"gpspipe.*" FIFO_1_NAME "\"";
 
 char fifo_2_make[] = "mkfifo " FIFO_2_NAME;
 char fifo_2_pipe[] = "gpspipe -R -r -o " FIFO_2_NAME;
+char fifo_2_kill[] = "pkill -f \"gpspipe.*" FIFO_2_NAME "\"";
 
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE VARIABLES ---------------------------------------------------- */
@@ -277,12 +279,14 @@ int lgw_gps_enable(char *tty_path, char *gps_family, speed_t target_brate, int *
         if (stat(FIFO_1_NAME, &buf) != 0) {
             system(fifo_1_make);
         }
+        system(fifo_1_kill);
         pipe_fd = popen(fifo_1_pipe, "r");
         fifo_name = FIFO_1_NAME;
     } else {
         if (stat(FIFO_2_NAME, &buf) != 0) {
             system(fifo_2_make);
         }
+        system(fifo_2_kill);
         pipe_fd = popen(fifo_2_pipe, "r");
         fifo_name = FIFO_2_NAME;
     }
