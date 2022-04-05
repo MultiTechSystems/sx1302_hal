@@ -272,7 +272,12 @@ int lgw_gps_enable(char *tty_path, char *gps_family, speed_t target_brate, int *
     /* check input parameters */
     CHECK_NULL(tty_path);
     CHECK_NULL(fd_ptr);
+    bool gps_supported = lgw_board_supports_gps();
 
+    if (gps_supported == false) {
+        printf("ERROR: Device does not support GPS\n");
+        return LGW_GPS_ERROR;
+    }
     struct stat buf;
 
     if (slot == 1) {
@@ -295,7 +300,7 @@ int lgw_gps_enable(char *tty_path, char *gps_family, speed_t target_brate, int *
     gps_tty_dev = open(fifo_name, O_RDONLY );
 
     if (gps_tty_dev <= 0) {
-        DEBUG_MSG("ERROR: TTY PORT FAIL TO OPEN, CHECK PATH AND ACCESS RIGHTS\n");
+        printf("ERROR: TTY PORT FAIL TO OPEN, CHECK PATH AND ACCESS RIGHTS\n");
         return LGW_GPS_ERROR;
     }
     *fd_ptr = gps_tty_dev;

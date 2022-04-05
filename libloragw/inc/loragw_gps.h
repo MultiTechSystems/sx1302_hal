@@ -28,7 +28,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #include <unistd.h>     /* ssize_t */
 
 #include "config.h"     /* library configuration options (dynamically generated) */
-
+#include "loragw_hal.h"
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC TYPES --------------------------------------------------------- */
 

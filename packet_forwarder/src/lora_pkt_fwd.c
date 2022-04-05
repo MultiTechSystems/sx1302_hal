@@ -1400,12 +1400,24 @@ static int parse_gateway_configuration(const char * conf_file) {
     }
     MSG("INFO: packets received with no CRC will%s be forwarded\n", (fwd_nocrc_pkt ? "" : " NOT"));
 
-    /* GPS module TTY path (optional) */
-    str = json_object_get_string(conf_obj, "gps_tty_path");
-    if (str != NULL) {
-        strncpy(gps_tty_path, str, sizeof gps_tty_path);
-        gps_tty_path[sizeof gps_tty_path - 1] = '\0'; /* ensure string termination */
-        MSG("INFO: GPS serial port path is configured to \"%s\"\n", gps_tty_path);
+    val = json_object_get_value(conf_obj, "gps");
+    if (json_value_get_type(val) == JSONBoolean) {
+        gps_enabled = (bool)json_value_get_boolean(val);
+        if (gps_enabled == true) {
+            MSG("INFO: GPS is enabled\n");
+        } else {
+            MSG("INFO: GPS is disabled\n");
+        }
+    }
+
+    if (gps_enabled || val == NULL) {
+        /* GPS module TTY path (optional) */
+        str = json_object_get_string(conf_obj, "gps_tty_path");
+        if (str != NULL) {
+            strncpy(gps_tty_path, str, sizeof gps_tty_path);
+            gps_tty_path[sizeof gps_tty_path - 1] = '\0'; /* ensure string termination */
+            MSG("INFO: GPS serial port path is configured to \"%s\"\n", gps_tty_path);
+        }
     }
 
     /* get reference coordinates */
@@ -1887,7 +1899,7 @@ int main(int argc, char ** argv)
     if (gps_tty_path[0] != '\0') { /* do not try to open GPS device if no path set */
         i = lgw_gps_enable(gps_tty_path, "ubx7", 0, &gps_tty_fd, ((com_type == LGW_COM_SPI && strcmp(com_path, "/dev/spidev0.0") > 0) ? 1 : 2)); /* HAL only supports u-blox 7 for now */
         if (i != LGW_GPS_SUCCESS) {
-            printf("WARNING: [main] impossible to open %s for GPS sync (check permissions)\n", gps_tty_path);
+            printf("WARNING: GPS disabled\n");
             gps_enabled = false;
             gps_ref_valid = false;
         } else {

@@ -178,6 +178,7 @@ struct lgw_conf_board_s {
     char            com_path[64];   /*!> Path to access the COM device to connect to the SX1302 */
     uint8_t         tmp102;         /*!> Tmp 102 address */
     hardware_type_t hardware_type;  /*!> Board hardware type */
+    bool            gps_supported;  /*!> Board GPS support */
 };
 
 /**
@@ -444,6 +445,12 @@ int reset_lgw_stop();
 @return LGW_HAL_ERROR id the operation failed, LGW_HAL_SUCCESS else
 */
 int lgw_board_setconf(struct lgw_conf_board_s * conf);
+
+/**
+@brief confirm that the board supports gps
+@return true/false
+*/
+bool lgw_board_supports_gps();
 
 /**
 @brief Configure an RF chain (must configure before start)

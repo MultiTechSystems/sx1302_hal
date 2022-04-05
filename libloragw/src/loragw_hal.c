@@ -77,6 +77,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define CONTEXT_TMP102          lgw_context.board_cfg.tmp102
 #define CONTEXT_LWAN_PUBLIC     lgw_context.board_cfg.lorawan_public
 #define CONTEXT_HARDWARE        lgw_context.board_cfg.hardware_type
+#define CONTEXT_GPS_SUPPORTED   lgw_context.board_cfg.gps_supported
 #define CONTEXT_BOARD           lgw_context.board_cfg
 #define CONTEXT_RF_CHAIN        lgw_context.rf_chain_cfg
 #define CONTEXT_IF_CHAIN        lgw_context.if_chain_cfg
@@ -535,6 +536,19 @@ int lgw_get_default_info() {
         return LGW_HAL_ERROR;
     }
 
+    int gps_supported = json_object_dotget_boolean(conf_obj, "capabilities.gps");
+
+    if (gps_supported == -1) {
+        DEBUG_PRINTF("GPS capability key not found in device info, disabling\n");
+        lgw_context.board_cfg.gps_supported = false;
+    } else if (gps_supported == 0) {
+        DEBUG_PRINTF("GPS not supported, disabling");
+        lgw_context.board_cfg.gps_supported = false;
+    } else if (gps_supported == 1) {
+        DEBUG_PRINTF("GPS supported");
+        lgw_context.board_cfg.gps_supported = true;
+    }
+
     conf_array = json_object_get_array (conf_obj, "accessoryCards");
 
     uint8_t accessory_port_size = 0;
@@ -557,6 +571,7 @@ int lgw_get_default_info() {
                 } else if (strstr(hwVersion, "MTAC")) {
                     lgw_context.board_cfg.hardware_type = HW_MTCDT;
                 }
+                DEBUG_PRINTF("DEBUG: Successfully device info defaults\n");
                 return LGW_HAL_SUCCESS;
             }
         }
@@ -610,6 +625,10 @@ int lgw_board_setconf(struct lgw_conf_board_s * conf) {
                                                                                                                             CONTEXT_BOARD.full_duplex);
 
     return LGW_HAL_SUCCESS;
+}
+
+bool lgw_board_supports_gps() {
+    return CONTEXT_GPS_SUPPORTED;
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
