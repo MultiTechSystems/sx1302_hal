@@ -216,15 +216,15 @@ static int     ad_fd = -1;
 
 /* LGW reset command lists per accessory port */
 static char *accessory_port_default[RESET_COMMAND_LIST_SIZE] = {
-    "mts-io-sysfs store lora/creset 1",
-    "mts-io-sysfs store lora/creset 0",
+    "mts-io-sysfs store lora/lbtreset 0",
+    "mts-io-sysfs store lora/lbtreset 1",
     "mts-io-sysfs store lora/reset 0",
     "mts-io-sysfs store lora/reset 1"
 };
 
 static char *accessory_port_2[RESET_COMMAND_LIST_SIZE] = {
-    "mts-io-sysfs store ap2/creset 1",
-    "mts-io-sysfs store ap2/creset 0",
+    "mts-io-sysfs store ap2/lbtreset 0",
+    "mts-io-sysfs store ap2/lbtreset 1",
     "mts-io-sysfs store ap2/reset 0",
     "mts-io-sysfs store ap2/reset 1"
 };
