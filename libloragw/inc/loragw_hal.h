@@ -162,7 +162,8 @@ typedef enum {
 */
 typedef enum hardware_type_e {
     HW_MTCDT,
-    HW_MTCAP,
+    HW_MTCAP_WITH_LBT,
+    HW_MTCAP_WITHOUT_LBT,
     HW_UNKNOWN,
 } hardware_type_t;
 

@@ -1,6 +1,6 @@
 ### get external defined data
 
-LIBLORAGW_VERSION := `cat ../VERSION`
+LIBLORAGW_VERSION := `git describe --tags > ../VERSION && cat ../VERSION`
 include library.cfg
 include ../target.cfg
 

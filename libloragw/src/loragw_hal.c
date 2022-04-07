@@ -214,19 +214,38 @@ static uint8_t ts_addr = 0xFF;
 /* I2C AD5338 handles */
 static int     ad_fd = -1;
 
-/* LGW reset command lists per accessory port */
-static char *accessory_port_default[RESET_COMMAND_LIST_SIZE] = {
+/* LGW reset command for mtcdt when a single card is installed (ap1 & ap2)*/
+static char *mtcdt_default_reset_cmd[6] = {
+    "mts-io-sysfs store lora/creset 1",
+    "mts-io-sysfs store lora/creset 0",
     "mts-io-sysfs store lora/lbtreset 0",
     "mts-io-sysfs store lora/lbtreset 1",
     "mts-io-sysfs store lora/reset 0",
     "mts-io-sysfs store lora/reset 1"
 };
 
-static char *accessory_port_2[RESET_COMMAND_LIST_SIZE] = {
+/* LGW reset command for mtcdt for ap2 card when both cards are installed*/
+static char *mtcdt_ap2_reset_cmd[6] = {
+    "mts-io-sysfs store ap2/creset 1",
+    "mts-io-sysfs store ap2/creset 0",
     "mts-io-sysfs store ap2/lbtreset 0",
     "mts-io-sysfs store ap2/lbtreset 1",
     "mts-io-sysfs store ap2/reset 0",
     "mts-io-sysfs store ap2/reset 1"
+};
+
+/* LGW reset command for mtcap with a 1261*/
+static char *mtcap_with_lbt_reset_cmd[4] = {
+    "mts-io-sysfs store lora/lbtreset 0",
+    "mts-io-sysfs store lora/lbtreset 1",
+    "mts-io-sysfs store lora/reset 0",
+    "mts-io-sysfs store lora/reset 1"
+};
+
+/* LGW reset command for mtcap without a 1261*/
+static char *mtcap_without_lbt_reset_cmd[2] = {
+    "mts-io-sysfs store lora/reset 0",
+    "mts-io-sysfs store lora/reset 1"
 };
 
 
@@ -466,6 +485,17 @@ static int merge_packets(struct lgw_pkt_rx_s * p, uint8_t * nb_pkt) {
     return 0;
 }
 
+static int run_cmds(char**reset_cmd, size_t reset_cmd_size) {
+    for(int i = 0; i < reset_cmd_size; i++) {
+        DEBUG_PRINTF("Running: %s\n", reset_cmd[i]);
+        if (system(reset_cmd[i]) != 0) {
+            return LGW_HAL_ERROR;
+        }
+        usleep( 500000 ); /* 500 ms */
+    }
+    return LGW_HAL_SUCCESS;
+}
+
 static int reset_lgw(int start) {
     struct stat buffer;
     if (stat("reset_lgw.sh", &buffer) == 0) {
@@ -487,20 +517,28 @@ static int reset_lgw(int start) {
         }
     } else {
         printf("INFO: No reset_lgw.sh found, running default reset procedure\n");
-        char **accessory_port;
-        if (strcmp(CONTEXT_COM_PATH, "/dev/spidev0.0") == 0 || CONTEXT_HARDWARE == HW_MTCAP) {
-            accessory_port = &accessory_port_default[0];
-        } else if (strcmp(CONTEXT_COM_PATH, "/dev/spidev1.0") == 0) {
-            accessory_port = &accessory_port_2[0];
+        char **reset_cmd;
+        size_t reset_cmd_size;
+        if (CONTEXT_HARDWARE == HW_MTCDT) {
+            if (strcmp(CONTEXT_COM_PATH, "/dev/spidev0.0") == 0) {
+                run_cmds(&mtcdt_default_reset_cmd[0],
+                    sizeof(mtcdt_default_reset_cmd)/sizeof(mtcdt_default_reset_cmd[0]));
+            } else if (strcmp(CONTEXT_COM_PATH, "/dev/spidev1.0") == 0) {
+                run_cmds(&mtcdt_ap2_reset_cmd[0],
+                    sizeof(mtcdt_ap2_reset_cmd)/sizeof(mtcdt_ap2_reset_cmd[0]));
+            } else {
+                return LGW_HAL_ERROR;
+            }
+        } else if (CONTEXT_HARDWARE == HW_MTCAP_WITH_LBT) {
+            run_cmds(&mtcap_with_lbt_reset_cmd[0],
+                    sizeof(mtcap_with_lbt_reset_cmd)/sizeof(mtcap_with_lbt_reset_cmd[0]));
+        } else if (CONTEXT_HARDWARE == HW_MTCAP_WITHOUT_LBT) {
+            run_cmds(&mtcap_without_lbt_reset_cmd[0],
+                    sizeof(mtcap_without_lbt_reset_cmd)/sizeof(mtcap_without_lbt_reset_cmd[0]));
         } else {
             return LGW_HAL_ERROR;
         }
-        for(int i = 0; i < RESET_COMMAND_LIST_SIZE; i++) {
-            if (system(accessory_port[i]) != 0) {
-                return LGW_HAL_ERROR;
-            }
-            usleep( 1000000 ); /* 1000 ms */
-        }
+
         return LGW_HAL_SUCCESS;
     }
 }
@@ -567,7 +605,20 @@ int lgw_get_default_info() {
                 strcpy(lgw_context.sx1261_cfg.spi_path, spiPath1261);
                 lgw_context.board_cfg.tmp102 = tmp102;
                 if (strstr(hwVersion, "MTCAP")) {
-                    lgw_context.board_cfg.hardware_type = HW_MTCAP;
+                    int loraLbt = json_object_dotget_boolean(conf_obj, "capabilities.loraLbt");
+                    if (loraLbt == -1) {
+                        DEBUG_PRINTF("DEBUG: Lbt key does not exist, assuming support\n");
+                        lgw_context.board_cfg.hardware_type = HW_MTCAP_WITH_LBT;
+                    } else if (loraLbt == 0) {
+                        DEBUG_PRINTF("DEBUG: Lbt is not supported\n");
+                        lgw_context.board_cfg.hardware_type = HW_MTCAP_WITHOUT_LBT;
+                    } else if (loraLbt == 1) {
+                        DEBUG_PRINTF("DEBUG: Lbt is supported\n");
+                        lgw_context.board_cfg.hardware_type = HW_MTCAP_WITH_LBT;
+                    } else {
+                        printf("WARNING: Unable to get lora lbt support info\n");
+                        return LGW_HAL_ERROR;
+                    }
                 } else if (strstr(hwVersion, "MTAC")) {
                     lgw_context.board_cfg.hardware_type = HW_MTCDT;
                 }
@@ -577,7 +628,7 @@ int lgw_get_default_info() {
         }
     }
 
-    printf("ERROR: Unable to get default spi paths from device_info.json\n");
+    printf("WARNING: Unable to get default spi paths from device_info.json\n");
     return LGW_HAL_ERROR;
 }
 
@@ -1246,7 +1297,7 @@ int lgw_start(void) {
     dbg_init_random();
 
     if (CONTEXT_COM_TYPE == LGW_COM_SPI) {
-        if (CONTEXT_HARDWARE != HW_MTCAP) {
+        if (CONTEXT_HARDWARE != HW_MTCAP_WITH_LBT && CONTEXT_HARDWARE != HW_MTCAP_WITHOUT_LBT) {
             /* Find the temperature sensor on the known supported ports */
             ts_addr = CONTEXT_BOARD.tmp102;
             err = i2c_linuxdev_open(I2C_DEVICE, ts_addr, &ts_fd);
@@ -1369,7 +1420,7 @@ int lgw_stop(void) {
     }
 
     if (CONTEXT_COM_TYPE == LGW_COM_SPI) {
-        if (CONTEXT_HARDWARE != HW_MTCAP) {
+        if (CONTEXT_HARDWARE != HW_MTCAP_WITH_LBT && CONTEXT_HARDWARE != HW_MTCAP_WITHOUT_LBT) {
             DEBUG_MSG("INFO: Closing I2C for temperature sensor\n");
             x = i2c_linuxdev_close(ts_fd);
             if (x != 0) {
@@ -1744,7 +1795,7 @@ int lgw_get_temperature(float* temperature) {
 
     CHECK_NULL(temperature);
 
-    if (CONTEXT_HARDWARE == HW_MTCAP) {
+    if (CONTEXT_HARDWARE == HW_MTCAP_WITH_LBT || CONTEXT_HARDWARE == HW_MTCAP_WITHOUT_LBT) {
         FILE *fptr;
         if ((fptr = fopen("/sys/class/hwmon/hwmon0/temp1_input","r")) == NULL){
             printf("Error: Unable to Open tmp102 file\n");
