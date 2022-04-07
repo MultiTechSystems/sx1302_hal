@@ -489,7 +489,7 @@ enum gps_msg lgw_parse_nmea(const char *serial_buff, int buff_size) {
             return IGNORED;
         }
         /* parse GPS status */
-        gps_mod = *(parser_buf + str_index[12]); /* get first character, no need to bother with sscanf */
+        gps_mod = (char)*(parser_buf + str_index[12]); /* get first character, no need to bother with sscanf */
         if ((gps_mod != 'N') && (gps_mod != 'A') && (gps_mod != 'D')) {
             gps_mod = 'N';
         }
