@@ -488,11 +488,17 @@ enum gps_msg lgw_parse_nmea(const char *serial_buff, int buff_size) {
             DEBUG_MSG("Warning: invalid RMC sentence (number of fields)\n");
             return IGNORED;
         }
+
         /* parse GPS status */
-        gps_mod = (char)*(parser_buf + str_index[12]); /* get first character, no need to bother with sscanf */
-        if ((gps_mod != 'N') && (gps_mod != 'A') && (gps_mod != 'D')) {
+        if (str_index[12] < 0) {
             gps_mod = 'N';
+        } else {
+            gps_mod = (char)*(parser_buf + str_index[12]); /* get first character, no need to bother with sscanf */
+            if ((gps_mod != 'N') && (gps_mod != 'A') && (gps_mod != 'D')) {
+                gps_mod = 'N';
+            }
         }
+
         /* parse complete time */
         i = sscanf(parser_buf + str_index[1], "%2hd%2hd%2hd%4f", &gps_hou, &gps_min, &gps_sec, &gps_fra);
         j = sscanf(parser_buf + str_index[9], "%2hd%2hd%2hd", &gps_day, &gps_mon, &gps_yea);
