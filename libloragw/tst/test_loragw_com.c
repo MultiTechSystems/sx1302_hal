@@ -52,7 +52,6 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define SX1302_REG_AGC_MCU  0x5780
 
 #define COM_TYPE_DEFAULT LGW_COM_SPI
-#define COM_PATH_DEFAULT "/dev/spidev0.0"
 
 /* -------------------------------------------------------------------------- */
 /* --- GLOBAL VARIABLES ----------------------------------------------------- */
@@ -85,9 +84,11 @@ int main(int argc, char ** argv)
     int i, x;
     uint16_t size;
 
+    /* get default device info */
+    lgw_get_default_info();
+
     /* COM interfaces */
-    const char com_path_default[] = COM_PATH_DEFAULT;
-    const char * com_path = com_path_default;
+    const char * com_path = lgw_get_default_com_path();
     lgw_com_type_t com_type = COM_TYPE_DEFAULT;
 
     /* Parse command line options */
@@ -421,7 +422,7 @@ static void usage(void) {
     printf(" -h            print this help\n");
     printf(" -u            set COM type as USB (default is SPI)\n");
     printf(" -d <path>     COM path to be used to connect the concentrator\n");
-    printf("               => default path (SPI): " COM_PATH_DEFAULT "\n");
+    printf("               => default path (SPI): %s\n", lgw_get_default_com_path());
 }
 
 /* --- EOF ------------------------------------------------------------------ */

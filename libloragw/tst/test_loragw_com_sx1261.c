@@ -45,8 +45,6 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define BUFF_SIZE           16
 
 #define COM_TYPE_DEFAULT    LGW_COM_SPI
-#define COM_PATH_DEFAULT    "/dev/spidev0.0"
-#define SX1261_PATH_DEFAULT "/dev/spidev0.1"
 
 /* -------------------------------------------------------------------------- */
 /* --- GLOBAL VARIABLES ----------------------------------------------------- */
@@ -75,13 +73,16 @@ int main(int argc, char ** argv)
     int cycle_number = 0;
     int i, x;
 
+    /* get default device info */
+    lgw_get_default_info();
+
     /* COM interfaces */
-    const char com_path_default[] = COM_PATH_DEFAULT;
-    const char * com_path = com_path_default;
+    const char * com_path = lgw_get_default_com_path();
+    const char * sx1261_path = lgw_get_default_sx1261_path();
     lgw_com_type_t com_type = COM_TYPE_DEFAULT;
 
     /* Parse command line options */
-    while ((i = getopt(argc, argv, "hd:u")) != -1) {
+    while ((i = getopt(argc, argv, "hd:s:u")) != -1) {
         switch (i) {
             case 'h':
                 usage();
@@ -91,6 +92,12 @@ int main(int argc, char ** argv)
             case 'd':
                 if (optarg != NULL) {
                     com_path = optarg;
+                }
+                break;
+
+            case 's':
+                if (optarg != NULL) {
+                    sx1261_path = optarg;
                 }
                 break;
 
@@ -130,7 +137,7 @@ int main(int argc, char ** argv)
     }
 
     /* Connect to the sx1261 radio */
-    x = sx1261_connect(com_type, SX1261_PATH_DEFAULT);
+    x = sx1261_connect(com_type, sx1261_path);
     if (x != LGW_REG_SUCCESS) {
         printf("ERROR: Failed to connect to the sx1261 using COM %s\n", com_path);
         return EXIT_FAILURE;
@@ -233,7 +240,9 @@ static void usage(void) {
     printf("~~~ Available options ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
     printf(" -h            print this help\n");
     printf(" -d <path>     path to access the COM device\n");
-    printf("               => default path: " COM_PATH_DEFAULT "\n");
+    printf("               => default path (SPI): %s\n", lgw_get_default_com_path());
+    printf(" -s <path>     path to access the SX1261 device\n");
+    printf("               => default path (SPI): %s\n", lgw_get_default_sx1261_path());
     printf(" -u            set COM type as USB (default is SPI)\n");
 }
 

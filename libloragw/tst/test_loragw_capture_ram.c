@@ -42,7 +42,6 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define DEBUG_MSG(str) fprintf(stdout, str)
 
 #define COM_TYPE_DEFAULT LGW_COM_SPI
-#define COM_PATH_DEFAULT "/dev/spidev0.0"
 
 #define CAPTURE_RAM_SIZE 0x4000
 
@@ -64,7 +63,7 @@ void usage(void)
     printf("Available options:\n");
     printf(" -h print this help\n");
     printf(" -d [path] Path to the SPI interface (USB is not supported)\n");
-    printf("            => default path: " COM_PATH_DEFAULT "\n");
+    printf("            => default path (SPI): %s\n", lgw_get_default_com_path());
     printf(" -s <uint> Capture source [0..31]\n");
 }
 
@@ -93,9 +92,11 @@ int main(int argc, char **argv)
 
     static struct sigaction sigact; /* SIGQUIT&SIGINT&SIGTERM signal handling */
 
+    /* get default device info */
+    lgw_get_default_info();
+
     /* SPI interfaces */
-    const char com_path_default[] = COM_PATH_DEFAULT;
-    const char * com_path = com_path_default;
+    const char * com_path = lgw_get_default_com_path();
     lgw_com_type_t com_type = COM_TYPE_DEFAULT;
 
     /* Parameter parsing */

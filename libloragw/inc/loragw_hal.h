@@ -454,6 +454,18 @@ int lgw_board_setconf(struct lgw_conf_board_s * conf);
 bool lgw_board_supports_gps();
 
 /**
+@brief get default com path
+@return path
+*/
+const char * lgw_get_default_com_path();
+
+/**
+@brief get default sx1261 path
+@return path
+*/
+const char * lgw_get_default_sx1261_path();
+
+/**
 @brief Configure an RF chain (must configure before start)
 @param rf_chain number of the RF chain to configure [0, LGW_RF_CHAIN_NB - 1]
 @param conf structure containing the configuration parameters

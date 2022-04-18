@@ -71,23 +71,24 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 
 #define TRACE()             fprintf(stderr, "@ %s %d\n", __FUNCTION__, __LINE__);
 
-#define CONTEXT_STARTED         lgw_context.is_started
-#define CONTEXT_COM_TYPE        lgw_context.board_cfg.com_type
-#define CONTEXT_COM_PATH        lgw_context.board_cfg.com_path
-#define CONTEXT_TMP102          lgw_context.board_cfg.tmp102
-#define CONTEXT_LWAN_PUBLIC     lgw_context.board_cfg.lorawan_public
-#define CONTEXT_HARDWARE        lgw_context.board_cfg.hardware_type
-#define CONTEXT_GPS_SUPPORTED   lgw_context.board_cfg.gps_supported
-#define CONTEXT_BOARD           lgw_context.board_cfg
-#define CONTEXT_RF_CHAIN        lgw_context.rf_chain_cfg
-#define CONTEXT_IF_CHAIN        lgw_context.if_chain_cfg
-#define CONTEXT_DEMOD           lgw_context.demod_cfg
-#define CONTEXT_LORA_SERVICE    lgw_context.lora_service_cfg
-#define CONTEXT_FSK             lgw_context.fsk_cfg
-#define CONTEXT_TX_GAIN_LUT     lgw_context.tx_gain_lut
-#define CONTEXT_FINE_TIMESTAMP  lgw_context.ftime_cfg
-#define CONTEXT_SX1261          lgw_context.sx1261_cfg
-#define CONTEXT_DEBUG           lgw_context.debug_cfg
+#define CONTEXT_STARTED             lgw_context.is_started
+#define CONTEXT_COM_TYPE            lgw_context.board_cfg.com_type
+#define CONTEXT_COM_PATH            lgw_context.board_cfg.com_path
+#define CONTEXT_TMP102              lgw_context.board_cfg.tmp102
+#define CONTEXT_LWAN_PUBLIC         lgw_context.board_cfg.lorawan_public
+#define CONTEXT_HARDWARE            lgw_context.board_cfg.hardware_type
+#define CONTEXT_GPS_SUPPORTED       lgw_context.board_cfg.gps_supported
+#define CONTEXT_BOARD               lgw_context.board_cfg
+#define CONTEXT_RF_CHAIN            lgw_context.rf_chain_cfg
+#define CONTEXT_IF_CHAIN            lgw_context.if_chain_cfg
+#define CONTEXT_DEMOD               lgw_context.demod_cfg
+#define CONTEXT_LORA_SERVICE        lgw_context.lora_service_cfg
+#define CONTEXT_FSK                 lgw_context.fsk_cfg
+#define CONTEXT_TX_GAIN_LUT         lgw_context.tx_gain_lut
+#define CONTEXT_FINE_TIMESTAMP      lgw_context.ftime_cfg
+#define CONTEXT_SX1261              lgw_context.sx1261_cfg
+#define CONTEXT_SX1261_SPI_PATH     lgw_context.sx1261_cfg.spi_path
+#define CONTEXT_DEBUG               lgw_context.debug_cfg
 
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE CONSTANTS & TYPES -------------------------------------------- */
@@ -527,6 +528,7 @@ static int reset_lgw(int start) {
                 run_cmds(&mtcdt_ap2_reset_cmd[0],
                     sizeof(mtcdt_ap2_reset_cmd)/sizeof(mtcdt_ap2_reset_cmd[0]));
             } else {
+                printf("ERROR: Invalid com path");
                 return LGW_HAL_ERROR;
             }
         } else if (CONTEXT_HARDWARE == HW_MTCAP_WITH_LBT) {
@@ -536,6 +538,7 @@ static int reset_lgw(int start) {
             run_cmds(&mtcap_without_lbt_reset_cmd[0],
                     sizeof(mtcap_without_lbt_reset_cmd)/sizeof(mtcap_without_lbt_reset_cmd[0]));
         } else {
+            printf("ERROR: Invalid Hardware\n");
             return LGW_HAL_ERROR;
         }
 
@@ -682,6 +685,13 @@ bool lgw_board_supports_gps() {
     return CONTEXT_GPS_SUPPORTED;
 }
 
+const char * lgw_get_default_com_path() {
+    return CONTEXT_COM_PATH;
+}
+
+const char * lgw_get_default_sx1261_path() {
+    return CONTEXT_SX1261_SPI_PATH;
+}
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 int lgw_rxrf_setconf(uint8_t rf_chain, struct lgw_conf_rxrf_s * conf) {
