@@ -82,6 +82,17 @@ enum gps_msg {
     UBX_NAV_TIMEUTC  /*!> UTC Time Solution */
 };
 
+/**
+@enum gps_state
+@brief track the state of GPS signal
+*/
+enum gps_state {
+    GPS_UNKNOWN,
+    GPS_RUNNING,
+    GPS_LOST,
+    GPS_RETRYING
+};
+
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC CONSTANTS ----------------------------------------------------- */
 
