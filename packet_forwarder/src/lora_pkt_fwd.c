@@ -2970,10 +2970,17 @@ void thread_down(void) {
     last_beacon_gps_time.tv_sec = 0;
     last_beacon_gps_time.tv_nsec = 0;
 
+    if (max_tx_power != -99) {
+        if (beacon_power > max_tx_power) {
+            MSG("INFO: [beacon] tx power reduced tx power: % dBm attn gain: %d dBi\n", max_tx_power, antenna_gain);
+            beacon_power = max_tx_power;
+        }
+    }
+
     /* beacon packet parameters */
     beacon_pkt.tx_mode = ON_GPS; /* send on PPS pulse */
     beacon_pkt.rf_chain = 0; /* antenna A */
-    beacon_pkt.rf_power = beacon_power;
+    beacon_pkt.rf_power = beacon_power - antenna_gain;
     beacon_pkt.modulation = MOD_LORA;
     switch (beacon_bw_hz) {
         case 125000:
@@ -3366,13 +3373,14 @@ void thread_down(void) {
             /* parse TX power (optional field) */
             val = json_object_get_value(txpk_obj,"powe");
             if (val != NULL) {
-                pwr = (int8_t)json_value_get_number(val) - antenna_gain;
+                pwr = (int8_t)json_value_get_number(val);
                 if (max_tx_power != -99) {
-                    if (pwr > max_tx_power - antenna_gain) {
+                    if (pwr > max_tx_power) {
                         MSG("INFO: [down] tx power reduced tx power: % dBm attn gain: %d dBi\n", max_tx_power, antenna_gain);
-                        pwr = max_tx_power - antenna_gain;
+                        pwr = max_tx_power;
                     }
                 }
+                pwr = pwr - antenna_gain;
             }
 
             if (temp_comp_enabled) {
