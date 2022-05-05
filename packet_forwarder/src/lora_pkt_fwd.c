@@ -181,8 +181,6 @@ static bool xtal_correct_ok = false; /* set true when XTAL correction is stable 
 static double xtal_correct = 1.0;
 
 /* GPS configuration and synchronization */
-static char gps_tty_path[64] = "\0"; /* path of the TTY port GPS is connected on */
-static int gps_tty_fd = -1; /* file descriptor of the GPS TTY port */
 static bool gps_enabled = false; /* is GPS enabled on that gateway ? */
 
 /* GPS time reference */
@@ -1411,14 +1409,9 @@ static int parse_gateway_configuration(const char * conf_file) {
         }
     }
 
-    if (gps_enabled || val == NULL) {
-        /* GPS module TTY path (optional) */
-        str = json_object_get_string(conf_obj, "gps_tty_path");
-        if (str != NULL) {
-            strncpy(gps_tty_path, str, sizeof gps_tty_path);
-            gps_tty_path[sizeof gps_tty_path - 1] = '\0'; /* ensure string termination */
-            MSG("INFO: GPS serial port path is configured to \"%s\"\n", gps_tty_path);
-        }
+    str = json_object_get_string(conf_obj, "gps_tty_path");
+    if (str != NULL) {
+        gps_enabled = true;
     }
 
     /* get reference coordinates */
@@ -1897,14 +1890,14 @@ int main(int argc, char ** argv)
     #endif
 
     /* Start GPS a.s.a.p., to allow it to lock */
-    if (gps_tty_path[0] != '\0') { /* do not try to open GPS device if no path set */
-        i = lgw_gps_enable(gps_tty_path, "ubx7", 0, &gps_tty_fd, ((com_type == LGW_COM_SPI && (strstr(com_path, "spidev0.0") != NULL)) ? 1 : 2)); /* HAL only supports u-blox 7 for now */
+    if (gps_enabled == true) { /* do not try to open GPS device if no path set */
+        i = lgw_gps_enable(); /* HAL only supports u-blox 7 for now */
         if (i != LGW_GPS_SUCCESS) {
             printf("WARNING: GPS disabled\n");
             gps_enabled = false;
             gps_ref_valid = false;
         } else {
-            printf("INFO: [main] TTY port %s open for GPS synchronization\n", gps_tty_path);
+            printf("INFO: [main] GPS synchronization enabled\n");
             gps_enabled = true;
             gps_ref_valid = false;
         }
@@ -2274,15 +2267,9 @@ int main(int argc, char ** argv)
         }
     }
     if (gps_enabled == true) {
-        pthread_cancel(thrid_gps); /* don't wait for GPS thread, no access to concentrator board */
         pthread_cancel(thrid_valid); /* don't wait for validation thread, no access to concentrator board */
-
-        i = lgw_gps_disable(gps_tty_fd);
-        if (i == LGW_HAL_SUCCESS) {
-            MSG("INFO: GPS closed successfully\n");
-        } else {
-            MSG("WARNING: failed to close GPS successfully\n");
-        }
+        pthread_cancel(thrid_gps); /* don't wait for GPS thread, no access to concentrator board */
+        lgw_gps_disable();
     }
 
     /* if an exit signal was received, try to quit properly */
@@ -3779,15 +3766,11 @@ static void gps_process_coords(void) {
 
 
 void thread_gps(void) {
-    /* serial variables */
-    char serial_buff[128]; /* buffer to receive GPS data */
+  /* serial variables */
     size_t wr_idx = 0;     /* pointer to end of chars in buffer */
-
+    char serial_buff[4096]; /* buffer to receive GPS data */
     /* variables for PPM pulse GPS synchronization */
     enum gps_msg latest_msg; /* keep track of latest NMEA message parsed */
-
-    /* initialize some variables before loop */
-    memset(serial_buff, 0, sizeof serial_buff);
 
     uint8_t read_fail_count = 0;
     enum gps_state state = GPS_RUNNING;
@@ -3800,41 +3783,46 @@ void thread_gps(void) {
 
         switch (state) {
         case GPS_LOST: {
-            i = lgw_gps_disable(gps_tty_fd);
-            if (i == LGW_HAL_SUCCESS) {
-                MSG("INFO: GPS closed successfully\n");
-            } else {
-                MSG("WARNING: failed to close GPS successfully\n");
-            }
-            read_fail_count = 0;
-            state = GPS_RETRYING;
-            wait_ms(5000);
-            continue;
-        }
-        case GPS_RETRYING: {
-            i = lgw_gps_enable(gps_tty_path, "ubx7", 0, &gps_tty_fd, ((com_type == LGW_COM_SPI && (strstr(com_path, "spidev0.0") != NULL)) ? 1 : 2)); /* HAL only supports u-blox 7 for now */
+            /* try and reestablish connection */
+            i = lgw_gps_enable();
             if (i != LGW_GPS_SUCCESS) {
                 printf("WARNING: [main] impossible to open for GPS sync (Check GPSD)\n");
                 gps_enabled = false;
                 gps_ref_valid = false;
+                wait_ms(2000);
+                continue;
             } else {
                 printf("INFO: [main] GPSD polling open for GPS synchronization\n");
                 gps_enabled = true;
                 gps_ref_valid = false;
-            }
-            nb_char = read(gps_tty_fd, serial_buff + wr_idx, LGW_GPS_MIN_MSG_SIZE);
-            if (nb_char <= 0) {
-                printf("WARNING: [gps] reconnect failed\n");
-                wait_ms(2000);
-                continue;
-            } else {
-                printf("INFO: [gps] reconnected\n");
                 state = GPS_RUNNING;
-                break;
+                wait_ms(1000);
+                continue;
             }
         }
         case GPS_RUNNING: {
-            nb_char = read(gps_tty_fd, serial_buff + wr_idx, LGW_GPS_MIN_MSG_SIZE);
+            memset(serial_buff, 0, sizeof serial_buff);
+            fd_set fds;
+            int r = 0;
+            struct timespec tv;
+            socket_t gps_fd = lgw_gps_fd();
+            tv.tv_sec = 0;
+            tv.tv_nsec = 100000000;
+            FD_ZERO(&fds);
+            FD_SET(gps_fd, &fds);
+            errno = 0;
+            /* try see if there's data */
+            r = pselect(gps_fd+1, &fds, NULL, NULL, &tv, NULL);
+            if (r == -1 && errno != EINTR) {
+                /* the pselect failed */
+                state = GPS_LOST;
+                continue;
+            } else if (r == 0) {
+                /* timeout has expired */
+                continue;
+            }
+            /* reading directly from the socket avoids decode overhead */
+            nb_char = recv(gps_fd, serial_buff + wr_idx, sizeof(serial_buff) - wr_idx, 0);
             if (nb_char <= 0) {
                 printf("WARNING: [gps] read() returned value %zd\n", nb_char);
                 read_fail_count++;
@@ -3850,6 +3838,8 @@ void thread_gps(void) {
             state = GPS_LOST;
             continue;
         }
+
+        wr_idx += (size_t)nb_char;
 
         wr_idx += (size_t)nb_char;
 

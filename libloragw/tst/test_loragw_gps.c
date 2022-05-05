@@ -188,7 +188,7 @@ int main(int argc, char **argv)
     memset(&boardconf, 0, sizeof(boardconf));
 
     /* serial variables */
-    char serial_buff[128]; /* buffer to receive GPS data */
+    char serial_buff[4096]; /* buffer to receive GPS data */
     size_t wr_idx = 0;     /* pointer to end of chars in buffer */
     int gps_tty_dev; /* file descriptor to the serial port of the GNSS module */
 
@@ -259,7 +259,7 @@ int main(int argc, char **argv)
     printf("*** Library version information ***\n%s\n***\n", lgw_version_info());
 
     /* Open and configure GPS */
-    i = lgw_gps_enable("/dev/ttyS0", "ubx7", 0, &gps_tty_dev, 1);
+    i = lgw_gps_enable();
     if (i != LGW_GPS_SUCCESS) {
         printf("ERROR: Failed to enable GPS\n");
         exit(EXIT_FAILURE);
@@ -319,17 +319,72 @@ int main(int argc, char **argv)
     memset(serial_buff, 0, sizeof serial_buff);
     memset(&ppm_ref, 0, sizeof ppm_ref);
 
+    uint8_t read_fail_count = 0;
+    uint8_t empty_packet_count = 0;
+    enum gps_state state = GPS_RUNNING;
+
     /* loop until user action */
     while ((quit_sig != 1) && (exit_sig != 1)) {
         size_t rd_idx = 0;
         size_t frame_end_idx = 0;
+        ssize_t nb_char = 0;
 
-        /* blocking non-canonical read on serial port */
-        ssize_t nb_char = read(gps_tty_dev, serial_buff + wr_idx, LGW_GPS_MIN_MSG_SIZE);
-        if (nb_char <= 0) {
-            printf("WARNING: [gps] read() returned value %zd\n", nb_char);
-            continue;
+        switch (state) {
+            case GPS_LOST: {
+                i = lgw_gps_disable();
+                if (i == LGW_HAL_SUCCESS) {
+                    printf("INFO: GPS closed successfully\n");
+                } else {
+                    printf("WARNING: failed to close GPS successfully\n");
+                }
+                empty_packet_count = 0;
+                read_fail_count = 0;
+                state = GPS_RECONNECTING;
+                wait_ms(5000);
+                continue;
+            }
+            case GPS_RECONNECTING: {
+                /* try and reestablish connection */
+                i = lgw_gps_enable();
+                if (i != LGW_GPS_SUCCESS) {
+                    printf("WARNING: [main] impossible to open for GPS sync (Check GPSD)\n");
+                    wait_ms(2000);
+                    continue;
+                } else {
+                    printf("INFO: [main] GPSD polling open for GPS synchronization\n");
+                    state = GPS_RUNNING;
+                    wait_ms(1000);
+                    continue;
+                }
+            }
+            case GPS_RUNNING: {
+                int result = lgw_gps_data_ready();
+
+                if (result != 1) {
+                    empty_packet_count++;
+                    if (empty_packet_count > 9) {
+                        state = GPS_LOST;
+                    }
+                    continue;
+                }
+                /* reading directly from the socket avoids decode overhead */
+                nb_char = lgw_gps_stream(serial_buff + wr_idx, sizeof(serial_buff) - wr_idx);
+                if (nb_char <= 0) {
+                    printf("WARNING: [gps] read() returned value %zd\n", nb_char);
+                    read_fail_count++;
+                    if (read_fail_count > 9) {
+                        state = GPS_LOST;
+                        continue;
+                    }
+                }
+                break;
+            }
+            default:
+                printf("ERROR: Unknown GPS state, resetting\n");
+                state = GPS_LOST;
+                continue;
         }
+
         wr_idx += (size_t)nb_char;
 
         /*******************************************
@@ -406,7 +461,6 @@ int main(int argc, char **argv)
 
     /* clean up before leaving */
     if (exit_sig == 1) {
-        lgw_gps_disable(gps_tty_dev);
         lgw_stop();
     }
 

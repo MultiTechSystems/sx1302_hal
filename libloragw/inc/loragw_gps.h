@@ -26,6 +26,10 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #include <time.h>       /* time library */
 #include <termios.h>    /* speed_t */
 #include <unistd.h>     /* ssize_t */
+#include <gpsd.h>
+#include <gpsdclient.h>
+#include <errno.h>      /* error messages */
+#include <sys/socket.h>
 
 #include "config.h"     /* library configuration options (dynamically generated) */
 #include "loragw_hal.h"
@@ -90,7 +94,7 @@ enum gps_state {
     GPS_UNKNOWN,
     GPS_RUNNING,
     GPS_LOST,
-    GPS_RETRYING
+    GPS_RECONNECTING
 };
 
 /* -------------------------------------------------------------------------- */
@@ -107,23 +111,28 @@ enum gps_state {
 /* --- PUBLIC FUNCTIONS PROTOTYPES ------------------------------------------ */
 
 /**
-@brief Configure a GPS module
-
-@param tty_path path to the TTY connected to the GPS
-@param gps_familly parameter (eg. ubx6 for uBlox gen.6)
-@param target_brate target baudrate for communication (0 keeps default target baudrate)
-@param fd_ptr pointer to a variable to receive file descriptor on GPS tty
+@brief Enable GPSD
 @return success if the function was able to connect and configure a GPS module
 */
-int lgw_gps_enable(char* tty_path, char* gps_familly, speed_t target_brate, int* fd_ptr, int slot);
+int lgw_gps_enable();
 
 /**
-@brief Restore GPS serial configuration and close serial device
-
-@param fd file descriptor on GPS tty
-@return success if the function was able to complete
+@brief Disable GPSD
+@return success if the function was able to disable the gpsd connection
 */
-int lgw_gps_disable(int fd);
+int lgw_gps_disable();
+
+/**
+@brief Prepare for a blocking read
+@return 1 if we have data waiting, 0 if it timed out
+*/
+int lgw_gps_data_ready();
+
+/**
+@brief Get data from gpsd stream
+@return size of message received
+*/
+int lgw_gps_stream(char *message, size_t len);
 
 /**
 @brief Parse messages coming from the GPS system (or other GNSS)

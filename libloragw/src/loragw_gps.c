@@ -59,19 +59,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 
 #define UBX_MSG_NAVTIMEGPS_LEN  16
 
-char* fifo_name;
-FILE* pipe_fd;
-
-#define FIFO_1_NAME "/dev/gps1.fifo"
-#define FIFO_2_NAME "/dev/gps2.fifo"
-
-char fifo_1_make[] = "mkfifo " FIFO_1_NAME;
-char fifo_1_pipe[] = "gpspipe -R -r -o " FIFO_1_NAME;
-char fifo_1_kill[] = "pkill -f \"gpspipe.*" FIFO_1_NAME "\"";
-
-char fifo_2_make[] = "mkfifo " FIFO_2_NAME;
-char fifo_2_pipe[] = "gpspipe -R -r -o " FIFO_2_NAME;
-char fifo_2_kill[] = "pkill -f \"gpspipe.*" FIFO_2_NAME "\"";
+static struct gps_data_t gpsdata;
 
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE VARIABLES ---------------------------------------------------- */
@@ -265,45 +253,24 @@ int str_chop(char *s, int buff_size, char separator, int *idx_ary, int max_idx) 
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC FUNCTIONS DEFINITION ------------------------------------------ */
 
-int lgw_gps_enable(char *tty_path, char *gps_family, speed_t target_brate, int *fd_ptr, int slot) {
-    int i;
-    int gps_tty_dev; /* file descriptor to the serial port of the GNSS module */
+int lgw_gps_enable() {
+    unsigned int flags;
+    struct fixsource_t source;
+    flags |= WATCH_RAW; /* super-raw data (gps binary) */
+    flags |= WATCH_NMEA; /* raw NMEA */
+    gpsd_source_spec(NULL, &source);
 
-    /* check input parameters */
-    CHECK_NULL(tty_path);
-    CHECK_NULL(fd_ptr);
     bool gps_supported = lgw_board_supports_gps();
-
     if (gps_supported == false) {
         printf("ERROR: Device does not support GPS\n");
         return LGW_GPS_ERROR;
     }
-    struct stat buf;
 
-    if (slot == 1) {
-        if (stat(FIFO_1_NAME, &buf) != 0) {
-            system(fifo_1_make);
-        }
-        system(fifo_1_kill);
-        pipe_fd = popen(fifo_1_pipe, "r");
-        fifo_name = FIFO_1_NAME;
-    } else {
-        if (stat(FIFO_2_NAME, &buf) != 0) {
-            system(fifo_2_make);
-        }
-        system(fifo_2_kill);
-        pipe_fd = popen(fifo_2_pipe, "r");
-        fifo_name = FIFO_2_NAME;
-    }
-
-    /* open gps fifo */
-    gps_tty_dev = open(fifo_name, O_RDONLY );
-
-    if (gps_tty_dev <= 0) {
-        printf("ERROR: TTY PORT FAIL TO OPEN, CHECK PATH AND ACCESS RIGHTS\n");
+    if (gps_open(source.server, source.port, &gpsdata) != 0) {
         return LGW_GPS_ERROR;
     }
-    *fd_ptr = gps_tty_dev;
+
+    (void)gps_stream(&gpsdata, flags, source.device);
 
     /* get timezone info */
     tzset();
@@ -318,23 +285,20 @@ int lgw_gps_enable(char *tty_path, char *gps_family, speed_t target_brate, int *
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
-int lgw_gps_disable(int fd) {
-    int i;
+int lgw_gps_disable() {
+    (void)gps_close(&gpsdata);
+}
 
-    i = close(fd);
-    i = pclose(pipe_fd);
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
-    if (memcmp(fifo_name, FIFO_1_NAME, 14) == 0)
-        system("rm /dev/gps1.fifo");
-    else
-        system("rm /dev/gps2.fifo");
+int lgw_gps_data_ready() {
+    return nanowait(gpsdata.gps_fd, NS_IN_SEC);
+}
 
-    if (i != 0) {
-        DEBUG_PRINTF("ERROR: TTY PORT FAIL TO CLOSE - %s\n", strerror(errno));
-        return LGW_GPS_ERROR;
-    }
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
-    return LGW_GPS_SUCCESS;
+int lgw_gps_stream(char *message, size_t len) {
+    return recv(gpsdata.gps_fd, message, len, 0);
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
