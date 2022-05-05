@@ -3785,12 +3785,8 @@ void thread_gps(void) {
 
         switch (state) {
         case GPS_LOST: {
-            i = lgw_gps_disable();
-            if (i == LGW_HAL_SUCCESS) {
-                MSG("INFO: GPS closed successfully\n");
-            } else {
-                MSG("WARNING: failed to close GPS successfully\n");
-            }
+            lgw_gps_disable();
+            MSG("INFO: GPS closed\n");
             empty_packet_count = 0;
             read_fail_count = 0;
             state = GPS_RECONNECTING;
@@ -3832,8 +3828,8 @@ void thread_gps(void) {
                 read_fail_count++;
                 if (read_fail_count > 9) {
                     state = GPS_LOST;
-                    continue;
                 }
+                continue;
             }
             break;
         }

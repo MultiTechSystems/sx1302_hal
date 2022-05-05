@@ -338,12 +338,8 @@ int main(int argc, char **argv)
 
         switch (state) {
             case GPS_LOST: {
-                i = lgw_gps_disable();
-                if (i == LGW_HAL_SUCCESS) {
-                    printf("INFO: GPS closed successfully\n");
-                } else {
-                    printf("WARNING: failed to close GPS successfully\n");
-                }
+                lgw_gps_disable();
+                printf("INFO: GPS closed\n");
                 empty_packet_count = 0;
                 read_fail_count = 0;
                 state = GPS_RECONNECTING;

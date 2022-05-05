@@ -118,9 +118,8 @@ int lgw_gps_enable();
 
 /**
 @brief Disable GPSD
-@return success if the function was able to disable the gpsd connection
 */
-int lgw_gps_disable();
+void lgw_gps_disable();
 
 /**
 @brief Prepare for a blocking read

@@ -285,7 +285,7 @@ int lgw_gps_enable() {
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
-int lgw_gps_disable() {
+void lgw_gps_disable() {
     (void)gps_close(&gpsdata);
 }
 
