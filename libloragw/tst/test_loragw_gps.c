@@ -258,6 +258,13 @@ int main(int argc, char **argv)
     printf("Beginning of test for loragw_gps.c\n");
     printf("*** Library version information ***\n%s\n***\n", lgw_version_info());
 
+
+    i = lgw_get_default_info();
+    if (i != LGW_HAL_SUCCESS) {
+        printf("ERROR: Failed to get default device info\n");
+        exit(EXIT_FAILURE);
+    }
+
     /* Open and configure GPS */
     i = lgw_gps_enable();
     if (i != LGW_GPS_SUCCESS) {
@@ -461,6 +468,7 @@ int main(int argc, char **argv)
 
     /* clean up before leaving */
     if (exit_sig == 1) {
+        lgw_gps_disable();
         lgw_stop();
     }
 
