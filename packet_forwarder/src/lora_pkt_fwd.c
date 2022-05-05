@@ -3766,15 +3766,17 @@ static void gps_process_coords(void) {
 
 
 void thread_gps(void) {
-  /* serial variables */
+    /* serial variables */
     size_t wr_idx = 0;     /* pointer to end of chars in buffer */
     char serial_buff[4096]; /* buffer to receive GPS data */
     /* variables for PPM pulse GPS synchronization */
     enum gps_msg latest_msg; /* keep track of latest NMEA message parsed */
 
     uint8_t read_fail_count = 0;
+    uint8_t empty_packet_count = 0;
     enum gps_state state = GPS_RUNNING;
     int i;
+    memset(serial_buff, 0, sizeof serial_buff);
 
     while (!exit_sig && !quit_sig) {
         size_t rd_idx = 0;
@@ -3783,6 +3785,19 @@ void thread_gps(void) {
 
         switch (state) {
         case GPS_LOST: {
+            i = lgw_gps_disable();
+            if (i == LGW_HAL_SUCCESS) {
+                MSG("INFO: GPS closed successfully\n");
+            } else {
+                MSG("WARNING: failed to close GPS successfully\n");
+            }
+            empty_packet_count = 0;
+            read_fail_count = 0;
+            state = GPS_RECONNECTING;
+            wait_ms(5000);
+            continue;
+        }
+        case GPS_RECONNECTING: {
             /* try and reestablish connection */
             i = lgw_gps_enable();
             if (i != LGW_GPS_SUCCESS) {
@@ -3801,28 +3816,17 @@ void thread_gps(void) {
             }
         }
         case GPS_RUNNING: {
-            memset(serial_buff, 0, sizeof serial_buff);
-            fd_set fds;
-            int r = 0;
-            struct timespec tv;
-            socket_t gps_fd = lgw_gps_fd();
-            tv.tv_sec = 0;
-            tv.tv_nsec = 100000000;
-            FD_ZERO(&fds);
-            FD_SET(gps_fd, &fds);
-            errno = 0;
-            /* try see if there's data */
-            r = pselect(gps_fd+1, &fds, NULL, NULL, &tv, NULL);
-            if (r == -1 && errno != EINTR) {
-                /* the pselect failed */
-                state = GPS_LOST;
-                continue;
-            } else if (r == 0) {
-                /* timeout has expired */
+            int result = lgw_gps_data_ready();
+
+            if (result != 1) {
+                empty_packet_count++;
+                if (empty_packet_count > 9) {
+                    state = GPS_LOST;
+                }
                 continue;
             }
             /* reading directly from the socket avoids decode overhead */
-            nb_char = recv(gps_fd, serial_buff + wr_idx, sizeof(serial_buff) - wr_idx, 0);
+            nb_char = lgw_gps_stream(serial_buff + wr_idx, sizeof(serial_buff) - wr_idx);
             if (nb_char <= 0) {
                 printf("WARNING: [gps] read() returned value %zd\n", nb_char);
                 read_fail_count++;
@@ -3838,8 +3842,6 @@ void thread_gps(void) {
             state = GPS_LOST;
             continue;
         }
-
-        wr_idx += (size_t)nb_char;
 
         wr_idx += (size_t)nb_char;
 
