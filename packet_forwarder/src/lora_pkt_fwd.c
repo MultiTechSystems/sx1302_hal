@@ -575,15 +575,13 @@ static int parse_SX130x_configuration(const char * conf_file) {
         boardconf.com_path[sizeof boardconf.com_path - 1] = '\0'; /* ensure string termination */
         com_path[sizeof com_path - 1] = '\0'; /* ensure string termination */
     } else {
-        MSG("ERROR: com_path must be configured in %s\n", conf_file);
-        return -1;
+        MSG("WARNING: com_path not configured in %s. Using default value\n", conf_file);
     }
     val = json_object_get_value(conf_obj, "tmp102"); /* fetch value (if possible) */
     if (val != NULL && json_value_get_type(val) == JSONNumber) {
         boardconf.tmp102 = (uint8_t)json_value_get_number(val);
     } else {
-        MSG("ERROR: tmp102 must be configured in %s\n", conf_file);
-        return -1;
+        MSG("WARNING: tmp102 not configured in %s. Using default value\n", conf_file);
     }
     val = json_object_get_value(conf_obj, "lorawan_public"); /* fetch value (if possible) */
     if (json_value_get_type(val) == JSONBoolean) {

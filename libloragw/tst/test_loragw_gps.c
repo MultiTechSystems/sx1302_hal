@@ -377,8 +377,8 @@ int main(int argc, char **argv)
                     read_fail_count++;
                     if (read_fail_count > 9) {
                         state = GPS_LOST;
-                        continue;
                     }
+                    continue;
                 }
                 break;
             }
