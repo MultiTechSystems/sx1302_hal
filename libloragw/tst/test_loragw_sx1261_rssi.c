@@ -84,11 +84,14 @@ int main(int argc, char ** argv)
     lgw_radio_type_t radio_type = LGW_RADIO_TYPE_SX1250;
 
     /* COM interfaces */
-    const char com_path_default[] = COM_PATH_DEFAULT;
-    const char * com_path = com_path_default;
     lgw_com_type_t com_type = COM_TYPE_DEFAULT;
-    const char sx1261_path_default[] = SX1261_PATH_DEFAULT;
-    const char * sx1261_path = sx1261_path_default;
+
+    /* get default device info */
+    lgw_get_default_info();
+
+    /* COM interfaces */
+    const char * com_path = lgw_get_default_com_path();
+    const char * sx1261_path = lgw_get_default_sx1261_path();
 
     struct lgw_conf_board_s boardconf;
     struct lgw_conf_rxrf_s rfconf;
