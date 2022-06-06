@@ -77,6 +77,8 @@ int main(int argc, char ** argv)
 
     uint8_t buff[BUFF_SIZE];
     uint32_t freq_hz = 0;
+    uint32_t timeout_ms = 0;
+    struct timeval tm_start;
     float rssi_inst;
     uint32_t fa = DEFAULT_FREQ_HZ;
     uint32_t fb = DEFAULT_FREQ_HZ;
@@ -97,7 +99,7 @@ int main(int argc, char ** argv)
     struct lgw_conf_rxrf_s rfconf;
 
     /* Parse command line options */
-    while ((i = getopt(argc, argv, "hd:uf:D:k:r:a:b:")) != -1) {
+    while ((i = getopt(argc, argv, "hd:uf:D:k:r:a:b:t:")) != -1) {
         switch (i) {
             case 'h':
                 usage();
@@ -140,6 +142,15 @@ int main(int argc, char ** argv)
                 }
                 break;
 
+            case 't': /* <uint> Timeout in ms */
+                i = sscanf(optarg, "%u", &arg_u);
+                if ((i != 1)) {
+                    printf("ERROR: argument parsing of -t argument. Use -h to print help\n");
+                    return EXIT_FAILURE;
+                } else {
+                    timeout_ms = (uint32_t)arg_u;
+                }
+                break;
             case 'k': /* <uint> Clock Source */
                 i = sscanf(optarg, "%u", &arg_u);
                 if ((i != 1) || (arg_u > 1)) {
@@ -149,7 +160,6 @@ int main(int argc, char ** argv)
                     clocksource = (uint8_t)arg_u;
                 }
                 break;
-
             case 'a': /* <float> Radio A RX frequency in MHz */
                 i = sscanf(optarg, "%lf", &arg_d);
                 if (i != 1) {
@@ -280,8 +290,14 @@ int main(int argc, char ** argv)
         exit_failure();
     }
 
+    timeout_start(&tm_start);
+
     /* databuffer R/W stress test */
     while ((quit_sig != 1) && (exit_sig != 1)) {
+        if (timeout_ms > 0 && timeout_check(tm_start, timeout_ms) != 0) {
+            break;
+        }
+
         buff[0] = 0x00;
         buff[1] = 0x00;
         sx1261_reg_r(SX1261_GET_RSSI_INST, buff, 2);
@@ -356,6 +372,7 @@ static void usage(void) {
     printf("               => default path: " SX1261_PATH_DEFAULT "\n");
     printf(" -k <uint>     Concentrator clock source (Radio A or Radio B) [0..1]\n");
     printf(" -r <uint>     Radio type (1255, 1257, 1250)\n");
+    printf(" -t <uint>     Timeout in ms (default is disabled)\n");
     printf(" -a <float>    Radio A RX frequency in MHz\n");
     printf(" -b <float>    Radio B RX frequency in MHz\n");
     printf(" -f <float>    SX1261 frequency for RSSI scanning, in MHz\n");

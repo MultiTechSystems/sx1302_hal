@@ -97,12 +97,13 @@ int main(int argc, char **argv)
     memset(&boardconf, 0, sizeof boardconf);
     memset(&sx1261conf, 0, sizeof sx1261conf);
 
-    /* COM interface */
-    const char com_path_default[] = COM_PATH_DEFAULT;
-    const char * com_path = com_path_default;
+    /* get default device info */
+    lgw_get_default_info();
+
+    /* COM interfaces */
     lgw_com_type_t com_type = COM_TYPE_DEFAULT;
-    const char sx1261_path_default[] = SX1261_PATH_DEFAULT;
-    const char * sx1261_path = sx1261_path_default;
+    const char * com_path = lgw_get_default_com_path();
+    const char * sx1261_path = lgw_get_default_sx1261_path();
 
     /* Spectral Scan */
     uint32_t freq_hz = DEFAULT_FREQ_HZ;
