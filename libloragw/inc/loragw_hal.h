@@ -162,6 +162,7 @@ typedef enum {
 */
 typedef enum hardware_type_e {
     HW_MTCDT,
+    HW_MTCPMHS,
     HW_MTCAP_WITH_LBT,
     HW_MTCAP_WITHOUT_LBT,
     HW_UNKNOWN,
@@ -177,9 +178,11 @@ struct lgw_conf_board_s {
     bool            full_duplex;    /*!> Indicates if the gateway operates in full duplex mode or not */
     lgw_com_type_t  com_type;       /*!> The COMmunication interface (SPI/USB) to connect to the SX1302 */
     char            com_path[64];   /*!> Path to access the COM device to connect to the SX1302 */
+    char            i2c_device[64]; /*!> Path to i2c bus for temp sensor */
     uint8_t         tmp102;         /*!> Tmp 102 address */
     hardware_type_t hardware_type;  /*!> Board hardware type */
     bool            gps_supported;  /*!> Board GPS support */
+
 };
 
 /**

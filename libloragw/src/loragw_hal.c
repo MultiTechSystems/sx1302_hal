@@ -74,6 +74,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define CONTEXT_STARTED             lgw_context.is_started
 #define CONTEXT_COM_TYPE            lgw_context.board_cfg.com_type
 #define CONTEXT_COM_PATH            lgw_context.board_cfg.com_path
+#define CONTEXT_I2C_DEVICE          lgw_context.board_cfg.i2c_device
 #define CONTEXT_TMP102              lgw_context.board_cfg.tmp102
 #define CONTEXT_LWAN_PUBLIC         lgw_context.board_cfg.lorawan_public
 #define CONTEXT_HARDWARE            lgw_context.board_cfg.hardware_type
@@ -128,6 +129,7 @@ static lgw_context_t lgw_context = {
     .is_started = false,
     .board_cfg.com_type = LGW_COM_SPI,
     .board_cfg.com_path = "/dev/spidev0.0",
+    .board_cfg.i2c_device = I2C_DEVICE_DEFAULT,
     .board_cfg.lorawan_public = true,
     .board_cfg.clksrc = 0,
     .board_cfg.full_duplex = false,
@@ -520,7 +522,7 @@ static int reset_lgw(int start) {
         printf("INFO: No reset_lgw.sh found, running default reset procedure\n");
         char **reset_cmd;
         size_t reset_cmd_size;
-        if (CONTEXT_HARDWARE == HW_MTCDT) {
+        if (CONTEXT_HARDWARE == HW_MTCDT || CONTEXT_HARDWARE == HW_MTCPMHS) {
             if (strcmp(CONTEXT_COM_PATH, "/dev/spidev0.0") == 0) {
                 run_cmds(&mtcdt_default_reset_cmd[0],
                     sizeof(mtcdt_default_reset_cmd)/sizeof(mtcdt_default_reset_cmd[0]));
@@ -559,7 +561,7 @@ int lgw_get_default_info() {
     const char conf_obj_name[] = "accessoryCards";
     JSON_Value *root_val;
     JSON_Object *conf_obj = NULL;
-    JSON_Array *conf_array = NULL;
+    JSON_Array *conf_ac_array = NULL;
     JSON_Object *conf_obj_array = NULL;
     uint8_t tmp102 = 0;
     /* try to parse JSON */
@@ -590,17 +592,18 @@ int lgw_get_default_info() {
         lgw_context.board_cfg.gps_supported = true;
     }
 
-    conf_array = json_object_get_array (conf_obj, "accessoryCards");
+    hwVersion = json_object_get_string(conf_obj, "hardwareVersion");
+
+    conf_ac_array = json_object_get_array (conf_obj, "accessoryCards");
 
     uint8_t accessory_port_size = 0;
 
-    if (conf_array != NULL) {
-        accessory_port_size = json_array_get_count(conf_array);
+    if (conf_ac_array != NULL) {
+        accessory_port_size = json_array_get_count(conf_ac_array);
         if (accessory_port_size >= 1) {
-            conf_obj_array = json_array_get_object(conf_array, 0);
+            conf_obj_array = json_array_get_object(conf_ac_array, 0);
             spiPath = json_object_get_string(conf_obj_array, "spiPath");
             spiPath1261 = json_object_get_string(conf_obj_array, "spiPath1261");
-            hwVersion = json_object_get_string(conf_obj_array, "hwVersion");
             tmp102 = json_object_get_number(conf_obj_array, "tmp102");
 
             if (spiPath != NULL && spiPath1261 != NULL && hwVersion != 0 && tmp102 != 0) {
@@ -622,7 +625,10 @@ int lgw_get_default_info() {
                         printf("WARNING: Unable to get lora lbt support info\n");
                         return LGW_HAL_ERROR;
                     }
-                } else if (strstr(hwVersion, "MTAC")) {
+                } else if (strstr(hwVersion, "MTCDT3")) {
+                    lgw_context.board_cfg.hardware_type = HW_MTCPMHS;
+                    strncpy(CONTEXT_I2C_DEVICE, I2C_DEVICE_MTCPMHS, sizeof CONTEXT_I2C_DEVICE);
+                } else if (strstr(hwVersion, "MTCDT")) {
                     lgw_context.board_cfg.hardware_type = HW_MTCDT;
                 }
                 DEBUG_PRINTF("DEBUG: Successfully device info defaults\n");
@@ -1310,7 +1316,7 @@ int lgw_start(void) {
         if (CONTEXT_HARDWARE != HW_MTCAP_WITH_LBT && CONTEXT_HARDWARE != HW_MTCAP_WITHOUT_LBT) {
             /* Find the temperature sensor on the known supported ports */
             ts_addr = CONTEXT_BOARD.tmp102;
-            err = i2c_linuxdev_open(I2C_DEVICE, ts_addr, &ts_fd);
+            err = i2c_linuxdev_open(CONTEXT_I2C_DEVICE, ts_addr, &ts_fd);
             if (err != LGW_I2C_SUCCESS) {
                 printf("ERROR: failed to open I2C for temperature sensor on port 0x%02X\n", ts_addr);
                 return LGW_HAL_ERROR;
@@ -1327,7 +1333,7 @@ int lgw_start(void) {
         }
         /* Configure ADC AD338R for full duplex (CN490 reference design) */
         if (CONTEXT_BOARD.full_duplex == true) {
-            err = i2c_linuxdev_open(I2C_DEVICE, I2C_PORT_DAC_AD5338R, &ad_fd);
+            err = i2c_linuxdev_open(CONTEXT_I2C_DEVICE, I2C_PORT_DAC_AD5338R, &ad_fd);
             if (err != LGW_I2C_SUCCESS) {
                 printf("ERROR: failed to open I2C for ad5338r\n");
                 return LGW_HAL_ERROR;

@@ -86,7 +86,7 @@ int main(int argc, char ** argv)
     uint8_t high_byte, low_byte;
     int8_t h;
     float temperature;
-    const char i2c_path_default[] = I2C_DEVICE;
+    const char i2c_path_default[] = I2C_DEVICE_DEFAULT;
     const char * i2c_path = i2c_path_default;
 
     /* Parse command line options */
@@ -246,7 +246,7 @@ static void usage(void) {
     printf("~~~ Available options ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
     printf(" -h            print this help\n");
     printf(" -d <path>     use Linux I2C device driver\n");
-    printf("               => default path: " I2C_DEVICE "\n");
+    printf("               => default path: " I2C_DEVICE_DEFAULT "\n");
 }
 
 /* --- EOF ------------------------------------------------------------------ */
