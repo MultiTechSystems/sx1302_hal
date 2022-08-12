@@ -239,8 +239,8 @@ static char *mtcdt_ap2_reset_cmd[6] = {
 
 /* LGW reset command for mtcap with a 1261*/
 static char *mtcap_with_lbt_reset_cmd[4] = {
-    "mts-io-sysfs store lora/lbtreset 0",
-    "mts-io-sysfs store lora/lbtreset 1",
+    "mts-io-sysfs store lora/lbt-reset 1",
+    "mts-io-sysfs store lora/lbt-reset 0",
     "mts-io-sysfs store lora/reset 0",
     "mts-io-sysfs store lora/reset 1"
 };
