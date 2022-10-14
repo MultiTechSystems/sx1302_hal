@@ -2171,6 +2171,8 @@ int main(int argc, char ** argv)
         printf("# PUSH_DATA datagrams sent: %u (%u bytes)\n", cp_up_dgram_sent, cp_up_network_byte);
         printf("# PUSH_DATA acknowledged: %.2f%%\n", 100.0 * up_ack_ratio);
         printf("### [DOWNSTREAM] ###\n");
+        if (duty_cycle_enabled)
+            printf("# TIME ON AIR available: %u ms\n", duty_cycle_time_avail);
         printf("# PULL_DATA sent: %u (%.2f%% acknowledged)\n", cp_dw_pull_sent, 100.0 * dw_ack_ratio);
         printf("# PULL_RESP(onse) datagrams received: %u (%u bytes)\n", cp_dw_dgram_rcv, cp_dw_network_byte);
         printf("# RF packets sent to concentrator: %u (%u bytes)\n", (cp_nb_tx_ok+cp_nb_tx_fail), cp_dw_payload_byte);
@@ -3624,6 +3626,7 @@ void thread_jit(void) {
     enum jit_error_e jit_result;
     enum jit_pkt_type_e pkt_type;
     uint8_t tx_status;
+    uint32_t time_on_air = 0;
     int i;
 
     while (!exit_sig && !quit_sig) {
@@ -3652,6 +3655,17 @@ void thread_jit(void) {
                             meas_nb_beacon_sent += 1;
                             pthread_mutex_unlock(&mx_meas_dw);
                             MSG("INFO: Beacon dequeued (count_us=%u)\n", pkt.count_us);
+                        }
+
+                        if (duty_cycle_enabled) {
+                            time_on_air = (uint32_t)lgw_time_on_air(&pkt); /* in ms */
+
+                            if (duty_cycle_time_avail >= time_on_air) {
+                                duty_cycle_time_avail -= time_on_air;
+                            } else {
+                                printf( "WARNING: DUTY-CYCLE-LIMIT | Not enough time-on-air available to allow transmission PKT: %lu ms AVAILABLE: %lu ms\n", time_on_air, duty_cycle_time_avail);
+                                continue;
+                            }
                         }
 
                         /* check if concentrator is free for sending new packet */
@@ -3942,6 +3956,24 @@ void thread_valid(void) {
     /* main loop task */
     while (!exit_sig && !quit_sig) {
         wait_ms(1000);
+
+        if (duty_cycle_enabled) {
+            static struct timespec last = { 0, 0 };
+            struct timespec now;
+            clock_gettime(CLOCK_MONOTONIC, &now);
+
+            if (last.tv_sec != 0) {
+                // uint64(now.tv_sec) * 1000 + now.tv_nsec / 1000000
+
+                duty_cycle_time_avail += difftimespec(now, last) * 1000u * duty_cycle_ratio;
+
+                if (duty_cycle_time_avail > duty_cycle_time_max) {
+                    duty_cycle_time_avail = duty_cycle_time_max;
+                }
+            }
+
+            last = now;
+        }
 
         /* calculate when the time reference was last updated */
         pthread_mutex_lock(&mx_timeref);
