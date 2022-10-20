@@ -145,7 +145,7 @@ lgw_gps_get function.
 If the lgw_parse_nmea and lgw_gps_get are used in different threads, a mutex
 lock must be acquired before calling either function.
 */
-enum gps_msg lgw_parse_nmea(const char* serial_buff, int buff_size);
+enum gps_msg lgw_parse_nmea(const char* serial_buff, size_t buff_size);
 
 /**
 @brief Parse Ublox proprietary messages coming from the GPS system

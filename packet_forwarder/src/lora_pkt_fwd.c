@@ -3780,7 +3780,7 @@ static void gps_process_coords(void) {
 void thread_gps(void) {
     /* serial variables */
     size_t wr_idx = 0;     /* pointer to end of chars in buffer */
-    char serial_buff[4096]; /* buffer to receive GPS data */
+    char serial_buff[256]; /* buffer to receive GPS data */
     /* variables for PPM pulse GPS synchronization */
     enum gps_msg latest_msg; /* keep track of latest NMEA message parsed */
 

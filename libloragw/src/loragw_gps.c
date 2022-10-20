@@ -87,7 +87,7 @@ static char gps_olo = 0; /* orientation (E-W) of longitude */
 static short gps_alt = 0; /* altitude */
 static bool gps_pos_ok = false;
 
-static char gps_mod = 'N'; /* GPS mode (N no fix, A autonomous, D differential) */
+static char gps_valid = 'V'; /* GPS valid (A = data valid or V = data not valid ) */
 static short gps_sat = 0; /* number of satellites used for fix */
 
 static struct termios ttyopt_restore;
@@ -95,11 +95,11 @@ static struct termios ttyopt_restore;
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE FUNCTIONS DECLARATION ---------------------------------------- */
 
-static int nmea_checksum(const char *nmea_string, int buff_size, char *checksum);
+static int nmea_checksum(const char *nmea_string, size_t buff_size, char *checksum);
 
 static char nibble_to_hexchar(uint8_t a);
 
-static bool validate_nmea_checksum(const char *serial_buff, int buff_size);
+static bool validate_nmea_checksum(const char *serial_buff, size_t buff_size);
 
 static bool match_label(const char *s, char *label, int size, char wildcard);
 
@@ -115,7 +115,7 @@ reached (or buff_size exceeded).
 Checksum must point to a 2-byte (or more) char array.
 Return position of the checksum in the string
 */
-static int nmea_checksum(const char *nmea_string, int buff_size, char *checksum) {
+static int nmea_checksum(const char *nmea_string, size_t buff_size, char *checksum) {
     int i = 0;
     uint8_t check_num = 0;
 
@@ -166,7 +166,7 @@ Calculate the checksum of a NMEA frame and compare it to the checksum that is
 present at the end of it.
 Return true if it matches
 */
-static bool validate_nmea_checksum(const char *serial_buff, int buff_size) {
+static bool validate_nmea_checksum(const char *serial_buff, size_t buff_size) {
     int checksum_index;
     char checksum[2]; /* 2 characters to calculate NMEA checksum */
 
@@ -204,6 +204,7 @@ static bool match_label(const char *s, char *label, int size, char wildcard) {
 
     for (i=0; i < size; i++) {
         if (label[i] == wildcard) continue;
+        if (!s[i] || !label[i]) return false;
         if (label[i] != s[i]) return false;
     }
     return true;
@@ -278,7 +279,7 @@ int lgw_gps_enable() {
     /* initialize global variables */
     gps_time_ok = false;
     gps_pos_ok = false;
-    gps_mod = 'N';
+    gps_valid = 'V';
 
     return LGW_GPS_SUCCESS;
 }
@@ -416,37 +417,42 @@ enum gps_msg lgw_parse_ubx(const char *serial_buff, size_t buff_size, size_t *ms
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
-enum gps_msg lgw_parse_nmea(const char *serial_buff, int buff_size) {
+enum gps_msg lgw_parse_nmea(const char *serial_buff, size_t buff_size) {
     int i, j, k;
     int str_index[30]; /* string index from the string chopping */
     int nb_fields; /* number of strings detected by string chopping */
     char parser_buf[256]; /* parsing modifies buffer so need a local copy */
+    char rmc_time[64] = {0}; /* string containing the time */
+    char rmc_date[64] = {0}; /* string containing the date */
+    memset(parser_buf, 0, sizeof parser_buf);
 
     /* check input parameters */
     if (serial_buff == NULL) {
         return UNKNOWN;
     }
 
-    if(buff_size > (int)(sizeof(parser_buf) - 1)) {
+    if(buff_size > (size_t)(sizeof(parser_buf) - 1)) {
         DEBUG_MSG("Note: input string to big for parsing\n");
         return INVALID;
-    }
-
-    /* look for some NMEA sentences in particular */
-    if (buff_size < 8) {
+    } else if (buff_size < 8) {
         DEBUG_MSG("ERROR: TOO SHORT TO BE A VALID NMEA SENTENCE\n");
         return UNKNOWN;
-    } else if (!validate_nmea_checksum(serial_buff, buff_size)) {
+    }
+
+    memcpy(parser_buf, serial_buff, buff_size);
+    parser_buf[buff_size] = '\0';
+
+    /* look for some NMEA sentences in particular */
+    if (!validate_nmea_checksum(parser_buf, buff_size)) {
         DEBUG_MSG("Warning: invalid NMEA sentence (bad checksum)\n");
         return INVALID;
-    } else if (match_label(serial_buff, "$G?RMC", 6, '?')) {
+    } else if (match_label(parser_buf, "$G?RMC", 6, '?')) {
         /*
         NMEA sentence format: $xxRMC,time,status,lat,NS,long,EW,spd,cog,date,mv,mvEW,posMode*cs<CR><LF>
         Valid fix: $GPRMC,083559.34,A,4717.11437,N,00833.91522,E,0.004,77.52,091202,,,A*00
         No fix: $GPRMC,,V,,,,,,,,,,N*00
         */
-        memcpy(parser_buf, serial_buff, buff_size);
-        parser_buf[buff_size] = '\0';
+
         nb_fields = str_chop(parser_buf, buff_size, ',', str_index, ARRAY_SIZE(str_index));
         if (nb_fields != 12) {
             DEBUG_MSG("Warning: invalid RMC sentence (number of fields)\n");
@@ -454,20 +460,28 @@ enum gps_msg lgw_parse_nmea(const char *serial_buff, int buff_size) {
         }
 
         /* parse GPS status */
-        if (str_index[12] < 0) {
-            gps_mod = 'N';
-        } else {
-            gps_mod = (char)*(parser_buf + str_index[12]); /* get first character, no need to bother with sscanf */
-            if ((gps_mod != 'N') && (gps_mod != 'A') && (gps_mod != 'D')) {
-                gps_mod = 'N';
+        if (parser_buf + str_index[2] != NULL && parser_buf + str_index[2] != 0) {
+            gps_valid = *(parser_buf + str_index[2]);
+            if ((gps_valid != 'A')) {
+                gps_valid = 'V';
             }
         }
 
-        /* parse complete time */
-        i = sscanf(parser_buf + str_index[1], "%2hd%2hd%2hd%4f", &gps_hou, &gps_min, &gps_sec, &gps_fra);
-        j = sscanf(parser_buf + str_index[9], "%2hd%2hd%2hd", &gps_day, &gps_mon, &gps_yea);
+        /* parse GPS time */
+        if (parser_buf + str_index[1] != NULL && parser_buf + str_index[1] != 0) {
+            strncat(rmc_time, parser_buf + str_index[1], 63);
+            i = sscanf(rmc_time, "%2hd%2hd%2hd%4f", &gps_hou, &gps_min, &gps_sec, &gps_fra);
+        }
+
+        /* parse GPS date */
+        if (parser_buf + str_index[9]!= NULL && parser_buf + str_index[9] != 0 ) {
+            strncat(rmc_date, parser_buf + str_index[9], 63);
+            j = sscanf(rmc_date, "%2hd%2hd%2hd", &gps_day, &gps_mon, &gps_yea);
+        }
+
+        /* if rmc status, hours, mins, secs, frac, day, mon, & yea is valid, set gps_time_ok to true */
         if ((i == 4) && (j == 3)) {
-            if ((gps_mod == 'A') || (gps_mod == 'D')) {
+            if (gps_valid == 'A') {
                 gps_time_ok = true;
                 DEBUG_MSG("Note: Valid RMC sentence, GPS locked, date: 20%02d-%02d-%02dT%02d:%02d:%06.3fZ\n", gps_yea, gps_mon, gps_day, gps_hou, gps_min, gps_fra + (float)gps_sec);
             } else {
@@ -477,10 +491,10 @@ enum gps_msg lgw_parse_nmea(const char *serial_buff, int buff_size) {
         } else {
             /* could not get a valid hour AND date */
             gps_time_ok = false;
-            DEBUG_MSG("Note: Valid RMC sentence, mode %c, no date\n", gps_mod);
+            DEBUG_MSG("Note: Valid RMC sentence, mode %c, no date\n", gps_valid);
         }
         return NMEA_RMC;
-    } else if (match_label(serial_buff, "$G?GGA", 6, '?')) {
+    } else if (match_label(parser_buf, "$G?GGA", 6, '?')) {
         /*
         NMEA sentence format: $xxGGA,time,lat,NS,long,EW,quality,numSV,HDOP,alt,M,sep,M,diffAge,diffStation*cs<CR><LF>
         Valid fix: $GPGGA,092725.00,4717.11399,N,00833.91590,E,1,08,1.01,499.6,M,48.0,M,,*5B
