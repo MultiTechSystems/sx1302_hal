@@ -355,7 +355,7 @@ enum gps_msg lgw_parse_ubx(const char *serial_buff, size_t buff_size, size_t *ms
                 if ((serial_buff[2] == 0x01) && (serial_buff[3] == 0x20)) {
                     /* Check validity of information */
                     valid = serial_buff[17] & 0x3; /* towValid, weekValid */
-                    if (valid) {
+                    if (valid && gps_pos_ok) {
                         /* Parse buffer to extract GPS time */
                         /* Warning: payload byte ordering is Little Endian */
                         gps_iTOW =  (uint8_t)serial_buff[6];
@@ -388,6 +388,7 @@ enum gps_msg lgw_parse_ubx(const char *serial_buff, size_t buff_size, size_t *ms
 #endif
                     } else { /* valid */
                         gps_time_ok = false;
+                        return IGNORED;
                     }
 
                     return UBX_NAV_TIMEGPS;
@@ -486,12 +487,15 @@ enum gps_msg lgw_parse_nmea(const char *serial_buff, size_t buff_size) {
                 DEBUG_MSG("Note: Valid RMC sentence, GPS locked, date: 20%02d-%02d-%02dT%02d:%02d:%06.3fZ\n", gps_yea, gps_mon, gps_day, gps_hou, gps_min, gps_fra + (float)gps_sec);
             } else {
                 gps_time_ok = false;
+                gps_pos_ok = false;
                 DEBUG_MSG("Note: Valid RMC sentence, no satellite fix, estimated date: 20%02d-%02d-%02dT%02d:%02d:%06.3fZ\n", gps_yea, gps_mon, gps_day, gps_hou, gps_min, gps_fra + (float)gps_sec);
+                return IGNORED;
             }
         } else {
             /* could not get a valid hour AND date */
             gps_time_ok = false;
             DEBUG_MSG("Note: Valid RMC sentence, mode %c, no date\n", gps_valid);
+            return IGNORED;
         }
         return NMEA_RMC;
     } else if (match_label(parser_buf, "$G?GGA", 6, '?')) {
