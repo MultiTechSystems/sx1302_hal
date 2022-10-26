@@ -606,6 +606,7 @@ int lgw_gps_sync(struct tref *ref, uint32_t count_us, struct timespec utc, struc
     bool aber_n0; /* is the update value for synchronization aberrant or not ? */
     static bool aber_min1 = false; /* keep track of whether value at sync N-1 was aberrant or not  */
     static bool aber_min2 = false; /* keep track of whether value at sync N-2 was aberrant or not  */
+    static uint32_t last_count_us = 0;
 
     CHECK_NULL(ref);
 
@@ -613,6 +614,15 @@ int lgw_gps_sync(struct tref *ref, uint32_t count_us, struct timespec utc, struc
 
     cnt_diff = (double)(count_us - ref->count_us) / (double)(TS_CPS); /* uncorrected by xtal_err */
     utc_diff = (double)(utc.tv_sec - (ref->utc).tv_sec) + (1E-9 * (double)(utc.tv_nsec - (ref->utc).tv_nsec));
+
+    if (cnt_diff == 0.0 || last_count_us == count_us) {
+        // no pps change from SX1301, invalidate system reference time
+        ref->systime = 0;
+        ref->count_us = count_us;
+        return LGW_GPS_ERROR;
+    }
+
+    last_count_us = count_us;
 
     /* detect aberrant points by measuring if slope limits are exceeded */
     if (utc_diff != 0) { // prevent divide by zero
