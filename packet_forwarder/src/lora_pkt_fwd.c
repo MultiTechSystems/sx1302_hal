@@ -2044,11 +2044,12 @@ int main(int argc, char ** argv)
             MSG("ERROR: [main] impossible to create GPS thread\n");
             exit(EXIT_FAILURE);
         }
-        i = pthread_create(&thrid_valid, NULL, (void * (*)(void *))thread_valid, NULL);
-        if (i != 0) {
-            MSG("ERROR: [main] impossible to create validation thread\n");
-            exit(EXIT_FAILURE);
-        }
+    }
+
+    i = pthread_create(&thrid_valid, NULL, (void * (*)(void *))thread_valid, NULL);
+    if (i != 0) {
+        MSG("ERROR: [main] impossible to create validation thread\n");
+        exit(EXIT_FAILURE);
     }
 
     /* configure signal handling */
@@ -3973,6 +3974,10 @@ void thread_valid(void) {
             }
 
             last = now;
+        }
+
+        if (gps_enabled != true) {
+            continue;
         }
 
         /* calculate when the time reference was last updated */
