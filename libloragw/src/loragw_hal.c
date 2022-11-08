@@ -1862,7 +1862,7 @@ uint32_t lgw_time_on_air(const struct lgw_pkt_tx_s *packet) {
 
     if (packet->modulation == MOD_LORA) {
         toa_us = lora_packet_time_on_air(packet->bandwidth, packet->datarate, packet->coderate, packet->preamble, packet->no_header, packet->no_crc, packet->size, NULL, NULL, NULL);
-        toa_ms = (uint32_t)( (double)toa_us / 1000.0 + 0.5 );
+        toa_ms = (uint32_t)( (double)toa_us / 1000.0 + 0.999 );
         DEBUG_PRINTF("INFO: LoRa packet ToA: %u ms\n", toa_ms);
     } else if (packet->modulation == MOD_FSK) {
         /* PREAMBLE + SYNC_WORD + PKT_LEN + PKT_PAYLOAD + CRC
