@@ -690,13 +690,19 @@ int lgw_cnt2utc(struct tref ref, uint32_t count_us, struct timespec *utc) {
         return LGW_GPS_ERROR;
     }
 
-    /* calculate delta in seconds between reference count_us and target count_us */
-    delta_sec = (double)(count_us - ref.count_us) / (TS_CPS * ref.xtal_err);
-
+    /* calculate delta in milliseconds between reference count_us and target count_us */
+    if (count_us > ref.count_us) {
+        delta_sec = (double)(count_us - ref.count_us) / (TS_CPS * ref.xtal_err);
+    } else {
+        delta_sec = -(double)(ref.count_us - count_us) / (TS_CPS * ref.xtal_err);
+    }
     /* now add that delta to reference UTC time */
     fractpart = modf (delta_sec , &intpart);
     tmp = ref.utc.tv_nsec + (long)(fractpart * 1E9);
-    if (tmp < (long)1E9) { /* the nanosecond part doesn't overflow */
+    if (tmp < 0) {
+        utc->tv_sec = ref.utc.tv_sec + (time_t)intpart - 1;
+        utc->tv_nsec = (long)1E9 + tmp;
+    } else if (tmp < (long)1E9) { /* the nanosecond part doesn't overflow */
         utc->tv_sec = ref.utc.tv_sec + (time_t)intpart;
         utc->tv_nsec = tmp;
     } else { /* must carry one second */
@@ -715,6 +721,11 @@ int lgw_utc2cnt(struct tref ref, struct timespec utc, uint32_t *count_us) {
     CHECK_NULL(count_us);
     if ((ref.systime == 0) || (ref.xtal_err > PLUS_10PPM) || (ref.xtal_err < MINUS_10PPM)) {
         DEBUG_MSG("ERROR: INVALID REFERENCE FOR UTC -> CNT CONVERSION\n");
+        return LGW_GPS_ERROR;
+    }
+
+    if (utc.tv_sec < ref.utc.tv_sec || (utc.tv_sec == ref.utc.tv_sec && utc.tv_nsec < ref.utc.tv_nsec)) {
+        DEBUG_MSG("ERROR: UTC time has passed\n");
         return LGW_GPS_ERROR;
     }
 
@@ -742,12 +753,19 @@ int lgw_cnt2gps(struct tref ref, uint32_t count_us, struct timespec *gps_time) {
     }
 
     /* calculate delta in milliseconds between reference count_us and target count_us */
-    delta_sec = (double)(count_us - ref.count_us) / (TS_CPS * ref.xtal_err);
+    if (count_us > ref.count_us) {
+        delta_sec = (double)(count_us - ref.count_us) / (TS_CPS * ref.xtal_err);
+    } else {
+        delta_sec = -(double)(ref.count_us - count_us) / (TS_CPS * ref.xtal_err);
+    }
 
     /* now add that delta to reference GPS time */
     fractpart = modf (delta_sec , &intpart);
     tmp = ref.gps.tv_nsec + (long)(fractpart * 1E9);
-    if (tmp < (long)1E9) { /* the nanosecond part doesn't overflow */
+    if (tmp < 0) {
+        gps_time->tv_sec = ref.gps.tv_sec + (time_t)intpart - 1;
+        gps_time->tv_nsec = (long)1E9 + tmp;
+    } else if (tmp < (long)1E9) { /* the nanosecond part doesn't overflow */
         gps_time->tv_sec = ref.gps.tv_sec + (time_t)intpart;
         gps_time->tv_nsec = tmp;
     } else { /* must carry one second */
@@ -766,6 +784,11 @@ int lgw_gps2cnt(struct tref ref, struct timespec gps_time, uint32_t *count_us) {
     CHECK_NULL(count_us);
     if ((ref.systime == 0) || (ref.xtal_err > PLUS_10PPM) || (ref.xtal_err < MINUS_10PPM)) {
         DEBUG_MSG("ERROR: INVALID REFERENCE FOR GPS -> CNT CONVERSION\n");
+        return LGW_GPS_ERROR;
+    }
+
+    if (gps_time.tv_sec < ref.gps.tv_sec || (gps_time.tv_sec == ref.gps.tv_sec && gps_time.tv_nsec < ref.gps.tv_nsec)) {
+        DEBUG_MSG("ERROR: GPS time has passed\n");
         return LGW_GPS_ERROR;
     }
 

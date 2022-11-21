@@ -150,6 +150,26 @@ static void gps_process_sync(void) {
     } else {
         printf("    ** FAILED **: (SX1302 -> UTC -> SX1302) conversion MISMATCH\n");
     }
+
+    x = ppm_tstamp - 500000;
+    printf("    * Test of timestamp counter <-> past GPS value conversion *\n");
+    printf("    Test value: %u\n", x);
+    i = lgw_cnt2gps(ppm_ref, x, &y);
+    printf("    Conversion to GPS: %lld.%09ld\n", (long long)y.tv_sec, y.tv_nsec);
+    i = lgw_gps2cnt(ppm_ref, y, &z);
+    if (i != LGW_GPS_ERROR)
+        printf("    ** FAILED **: Converted past time back: %u ==> %dµs\n", z, (int32_t)(z-x));
+    else
+        printf("    ** PASS **: Could not convert to CNT, GPS time has passed\n");
+    printf("    * Test of timestamp counter <-> past UTC value conversion *\n");
+    printf("    Test value: %u\n", x);
+    i = lgw_cnt2utc(ppm_ref, x, &y);
+    printf("    Conversion to UTC: %lld.%09ld\n", (long long)y.tv_sec, y.tv_nsec);
+    i = lgw_utc2cnt(ppm_ref, y, &z);
+    if (i != LGW_GPS_ERROR)
+        printf("    ** FAILED **: Converted past time back: %u ==> %dµs\n", z, (int32_t)(z-x));
+    else
+        printf("    ** PASS **: Could not convert to CNT, UTC time has passed\n");
 }
 
 static void gps_process_coords(void) {
