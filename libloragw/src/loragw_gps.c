@@ -31,6 +31,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #include <math.h>       /* modf */
 
 #include "loragw_gps.h"
+#include "loragw_sx1302.h"
 
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE MACROS ------------------------------------------------------- */
@@ -52,10 +53,11 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 /* -------------------------------------------------------------------------- */
 /* --- PRIVATE CONSTANTS ---------------------------------------------------- */
 
-#define TS_CPS              1E6 /* count-per-second of the timestamp counter */
-#define PLUS_10PPM          1.00001
-#define MINUS_10PPM         0.99999
-#define DEFAULT_BAUDRATE    B9600
+#define TS_CPS                  1E6 /* count-per-second of the timestamp counter */
+#define PLUS_10PPM              1.00001
+#define MINUS_10PPM             0.99999
+#define DEFAULT_BAUDRATE        B9600
+#define NO_PPS_RESET_THRES      90.0  // seconds
 
 #define UBX_MSG_NAVTIMEGPS_LEN  16
 
@@ -607,6 +609,7 @@ int lgw_gps_sync(struct tref *ref, uint32_t count_us, struct timespec utc, struc
     static bool aber_min1 = false; /* keep track of whether value at sync N-1 was aberrant or not  */
     static bool aber_min2 = false; /* keep track of whether value at sync N-2 was aberrant or not  */
     static uint32_t last_count_us = 0;
+    static uint32_t last_pps_reset = 0;
 
     CHECK_NULL(ref);
 
@@ -623,6 +626,20 @@ int lgw_gps_sync(struct tref *ref, uint32_t count_us, struct timespec utc, struc
     }
 
     last_count_us = count_us;
+
+    uint32_t count_inst = 0;
+    lgw_get_instcnt(&count_inst);
+
+    /* if ref and instcnt difference is too large, reset the gps ctrl register */
+    float delta_sec = 0;
+    if (ref->count_us != 0 && count_inst != 0) {
+        delta_sec = (double)(count_inst - ref->count_us) / (TS_CPS * ref->xtal_err);
+        if (delta_sec > NO_PPS_RESET_THRES && (count_inst < last_pps_reset || (count_inst - last_pps_reset) > 5 * TS_CPS)) {
+            sx1302_gps_enable(false);
+            sx1302_gps_enable(true);
+            last_pps_reset = count_inst;
+        }
+    }
 
     /* detect aberrant points by measuring if slope limits are exceeded */
     if (utc_diff != 0) { // prevent divide by zero
@@ -676,7 +693,6 @@ int lgw_gps_sync(struct tref *ref, uint32_t count_us, struct timespec utc, struc
 
     return LGW_GPS_SUCCESS;
 }
-
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
 int lgw_cnt2utc(struct tref ref, uint32_t count_us, struct timespec *utc) {
