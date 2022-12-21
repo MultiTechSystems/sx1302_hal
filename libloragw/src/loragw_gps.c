@@ -634,11 +634,21 @@ int lgw_gps_sync(struct tref *ref, uint32_t count_us, struct timespec utc, struc
     double delta_sec = 0;
     if (ref->count_us != 0 && count_inst != 0) {
         /* uint32 diff is OK for rollover, if count_inst is reset the diff will be > 90 */
-        delta_sec = (double)((int64_t)count_inst - (int64_t)ref->count_us) / (TS_CPS * ref->xtal_err);
+        /* calculate delta in seconds between reference count_us and count_inst
+           calculate rollover diff, uint32 difference is OK */
+        if (count_inst > ref.count_us || ((ref.count_us & 0xFF000000) == 0xFF000000) && ((count_inst & 0xFF000000) == 0)) {
+            delta_sec = (double)(count_inst - ref.count_us) / (TS_CPS * ref.xtal_err);
+        } else {
+            // negative value is abnormal as the count_inst should always be ahead of ref.count_us, we will reset if delta_sec is negative
+            delta_sec = -(double)(ref.count_us - count_inst) / (TS_CPS * ref.xtal_err);
+        }
+
         if ((delta_sec < 0 || delta_sec > NO_PPS_RESET_THRES) && (count_inst < last_pps_reset || (count_inst - last_pps_reset) > 5 * TS_CPS)) {
             sx1302_gps_enable(false);
             sx1302_gps_enable(true);
             last_pps_reset = count_inst;
+            ref->systime = 0;
+            ref->count_us = count_us;
             return LGW_GPS_ERROR;
         }
     }
