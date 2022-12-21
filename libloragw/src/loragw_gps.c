@@ -631,13 +631,15 @@ int lgw_gps_sync(struct tref *ref, uint32_t count_us, struct timespec utc, struc
     lgw_get_instcnt(&count_inst);
 
     /* if ref and instcnt difference is too large, reset the gps ctrl register */
-    float delta_sec = 0;
+    double delta_sec = 0;
     if (ref->count_us != 0 && count_inst != 0) {
-        delta_sec = (double)(count_inst - ref->count_us) / (TS_CPS * ref->xtal_err);
-        if (delta_sec > NO_PPS_RESET_THRES && (count_inst < last_pps_reset || (count_inst - last_pps_reset) > 5 * TS_CPS)) {
+        /* uint32 diff is OK for rollover, if count_inst is reset the diff will be > 90 */
+        delta_sec = (double)((int64_t)count_inst - (int64_t)ref->count_us) / (TS_CPS * ref->xtal_err);
+        if ((delta_sec < 0 || delta_sec > NO_PPS_RESET_THRES) && (count_inst < last_pps_reset || (count_inst - last_pps_reset) > 5 * TS_CPS)) {
             sx1302_gps_enable(false);
             sx1302_gps_enable(true);
             last_pps_reset = count_inst;
+            return LGW_GPS_ERROR;
         }
     }
 
@@ -706,8 +708,9 @@ int lgw_cnt2utc(struct tref ref, uint32_t count_us, struct timespec *utc) {
         return LGW_GPS_ERROR;
     }
 
-    /* calculate delta in milliseconds between reference count_us and target count_us */
-    if (count_us > ref.count_us) {
+    /* calculate delta in seconds between reference count_us and target count_us
+       calculate rollover diff, uint32 difference is OK */
+    if (count_us > ref.count_us || ((ref.count_us & 0xFF000000) == 0xFF000000) && ((count_us & 0xFF000000) == 0)) {
         delta_sec = (double)(count_us - ref.count_us) / (TS_CPS * ref.xtal_err);
     } else {
         delta_sec = -(double)(ref.count_us - count_us) / (TS_CPS * ref.xtal_err);
@@ -768,8 +771,9 @@ int lgw_cnt2gps(struct tref ref, uint32_t count_us, struct timespec *gps_time) {
         return LGW_GPS_ERROR;
     }
 
-    /* calculate delta in milliseconds between reference count_us and target count_us */
-    if (count_us > ref.count_us) {
+    /* calculate delta in seconds between reference count_us and target count_us
+       calculate rollover diff, uint32 difference is OK */
+    if (count_us > ref.count_us || ((ref.count_us & 0xFF000000) == 0xFF000000) && ((count_us & 0xFF000000) == 0)) {
         delta_sec = (double)(count_us - ref.count_us) / (TS_CPS * ref.xtal_err);
     } else {
         delta_sec = -(double)(ref.count_us - count_us) / (TS_CPS * ref.xtal_err);
