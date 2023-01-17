@@ -57,7 +57,7 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define PLUS_10PPM              1.00001
 #define MINUS_10PPM             0.99999
 #define DEFAULT_BAUDRATE        B9600
-#define NO_PPS_RESET_THRES      90.0  // seconds
+#define NO_PPS_RESET_THRES      30.0  // seconds
 
 #define UBX_MSG_NAVTIMEGPS_LEN  16
 
@@ -600,7 +600,8 @@ int lgw_gps_get(struct timespec *utc, struct timespec *gps_time, struct coord_s 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
-int lgw_gps_sync(struct tref *ref, uint32_t count_us, struct timespec utc, struct timespec gps_time) {
+int lgw_gps_sync(struct tref *ref, uint32_t count_us, uint32_t count_inst, struct timespec utc, struct timespec gps_time) {
+
     double cnt_diff; /* internal concentrator time difference (in seconds) */
     double utc_diff; /* UTC time difference (in seconds) */
     double slope; /* time slope between new reference and old reference (for sanity check) */
@@ -626,9 +627,6 @@ int lgw_gps_sync(struct tref *ref, uint32_t count_us, struct timespec utc, struc
     }
 
     last_count_us = count_us;
-
-    uint32_t count_inst = 0;
-    lgw_get_instcnt(&count_inst);
 
     /* if ref and instcnt difference is too large, reset the gps ctrl register */
     double delta_sec = 0;

@@ -84,6 +84,7 @@ static void sig_handler(int sigio) {
 static void gps_process_sync(void) {
     /* variables for PPM pulse GPS synchronization */
     uint32_t ppm_tstamp;
+    uint32_t cnt_inst;
     struct timespec ppm_gps;
     struct timespec ppm_utc;
 
@@ -105,8 +106,15 @@ static void gps_process_sync(void) {
         return;
     }
 
+    /* get timestamp for synchronization */
+    i = lgw_get_instcnt(&cnt_inst);
+    if (i != LGW_HAL_SUCCESS) {
+        printf("    Failed to read timestamp, synchronization impossible.\n");
+        return;
+    }
+
     /* try to update synchronize time reference with the new GPS & timestamp */
-    i = lgw_gps_sync(&ppm_ref, ppm_tstamp, ppm_utc, ppm_gps);
+    i = lgw_gps_sync(&ppm_ref, ppm_tstamp, cnt_inst, ppm_utc, ppm_gps);
     if (i != LGW_GPS_SUCCESS) {
         printf("    Synchronization error.\n");
         return;

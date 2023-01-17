@@ -190,7 +190,7 @@ int lgw_gps_get(struct timespec *utc, struct timespec *gps_time, struct coord_s 
 
 Set systime to 0 in ref to trigger initial synchronization.
 */
-int lgw_gps_sync(struct tref *ref, uint32_t count_us, struct timespec utc, struct timespec gps_time);
+int lgw_gps_sync(struct tref *ref, uint32_t count_us, uint32_t count_inst, struct timespec utc, struct timespec gps_time);
 
 /**
 @brief Convert concentrator timestamp counter value to UTC time

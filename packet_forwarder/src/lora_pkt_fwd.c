@@ -241,6 +241,7 @@ static uint8_t beacon_datarate = DEFAULT_BEACON_DATARATE; /* set beacon datarate
 static uint32_t beacon_bw_hz = DEFAULT_BEACON_BW_HZ; /* set beacon bandwidth, in Hz */
 static int8_t beacon_power = DEFAULT_BEACON_POWER; /* set beacon TX power, in dBm */
 static uint8_t beacon_infodesc = DEFAULT_BEACON_INFODESC; /* set beacon information descriptor */
+static bool beacon_reset = false; // reset last beacon if PPS is lost or sync is broken
 
 /* auto-quit function */
 static uint32_t autoquit_threshold = 0; /* enable auto-quit after a number of non-acknowledged PULL_DATA (0 = disabled)*/
@@ -3098,6 +3099,12 @@ void thread_down(void) {
             retry = 0;
             while (beacon_loop && (beacon_period != 0)) {
                 pthread_mutex_lock(&mx_timeref);
+
+                if (beacon_reset) {
+                    beacon_reset = false;
+                    last_beacon_gps_time.tv_sec = 0;
+                }
+
                 /* Wait for GPS to be ready before inserting beacons in JiT queue */
                 if ((gps_ref_valid == true) && (xtal_correct_ok == true)) {
 
@@ -3669,6 +3676,11 @@ void thread_jit(void) {
                             }
                         }
 
+                        if (pkt.tx_mode == ON_GPS && (!gps_ref_valid || beacon_reset)) {
+                            MSG("WARNING: [jit%d] tx failed, no PPS for GPS packet\n", i);
+                            continue;
+                        }
+
                         /* check if concentrator is free for sending new packet */
                         pthread_mutex_lock(&mx_concent); /* may have to wait for a fetch to finish */
                         result = lgw_status(pkt.rf_chain, TX_STATUS, &tx_status);
@@ -3681,6 +3693,7 @@ void thread_jit(void) {
                                 print_tx_status(tx_status);
                                 continue;
                             } else if (tx_status == TX_SCHEDULED) {
+                                lgw_abort_tx(i);
                                 MSG("WARNING: a downlink was already scheduled on rf_chain %d, overwritting it...\n", i);
                                 print_tx_status(tx_status);
                             } else {
@@ -3732,6 +3745,8 @@ static void gps_process_sync(void) {
     struct timespec gps_time;
     struct timespec utc;
     uint32_t trig_tstamp; /* concentrator timestamp associated with PPM pulse */
+    uint32_t inst_tstamp; /* concentrator current timestamp to judge expired PPM offset */
+
     int i = lgw_gps_get(&utc, &gps_time, NULL, NULL);
 
     /* get GPS time for synchronization */
@@ -3743,6 +3758,7 @@ static void gps_process_sync(void) {
     /* get timestamp captured on PPM pulse  */
     pthread_mutex_lock(&mx_concent);
     i = lgw_get_trigcnt(&trig_tstamp);
+    i |= lgw_get_instcnt(&inst_tstamp);
     pthread_mutex_unlock(&mx_concent);
     if (i != LGW_HAL_SUCCESS) {
         MSG("WARNING: [gps] failed to read concentrator timestamp\n");
@@ -3751,9 +3767,10 @@ static void gps_process_sync(void) {
 
     /* try to update time reference with the new GPS time & timestamp */
     pthread_mutex_lock(&mx_timeref);
-    i = lgw_gps_sync(&time_reference_gps, trig_tstamp, utc, gps_time);
+    i = lgw_gps_sync(&time_reference_gps, trig_tstamp, inst_tstamp, utc, gps_time);
     pthread_mutex_unlock(&mx_timeref);
     if (i != LGW_GPS_SUCCESS) {
+        beacon_reset = true;
         MSG("WARNING: [gps] GPS out of sync, keeping previous time reference\n");
     }
 }
