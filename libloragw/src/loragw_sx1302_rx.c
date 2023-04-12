@@ -179,7 +179,7 @@ int rx_buffer_fetch(rx_buffer_t * self) {
                 DEBUG_PRINTF("INFO: syncword found at idx %d\n", idx);
                 break;
             } else {
-                printf("INFO: syncword not found at idx %d\n", idx);
+                DEBUG_PRINTF("INFO: syncword not found at idx %d\n", idx);
                 idx += 1;
             }
         }
