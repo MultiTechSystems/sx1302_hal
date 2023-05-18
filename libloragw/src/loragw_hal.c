@@ -530,7 +530,7 @@ static int reset_lgw(int start) {
                 run_cmds(&mtcdt_ap2_reset_cmd[0],
                     sizeof(mtcdt_ap2_reset_cmd)/sizeof(mtcdt_ap2_reset_cmd[0]));
             } else {
-                printf("ERROR: Invalid com path");
+                printf("ERROR: Invalid com path: %s\n", CONTEXT_COM_PATH);
                 return LGW_HAL_ERROR;
             }
         } else if (CONTEXT_HARDWARE == HW_MTCAP_WITH_LBT) {

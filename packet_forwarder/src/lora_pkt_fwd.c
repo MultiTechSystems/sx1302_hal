@@ -295,7 +295,7 @@ static void usage(void);
 
 static void sig_handler(int sigio);
 
-static int parse_SX130x_configuration(const char * conf_file);
+static int parse_SX130x_configuration(const char * conf_file, uint8_t port);
 
 static int parse_gateway_configuration(const char * conf_file);
 
@@ -497,6 +497,7 @@ static void usage(void) {
     printf(" -h  print this help\n");
     printf(" -c <filename>  use config file other than 'global_conf.json'\n");
     printf(" -l <filename>  log output to file'\n");
+    printf(" -p <port>      port to use for MTCDT/MTCDT3 (1 or 2)'\n");
     printf("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
 }
 
@@ -509,7 +510,7 @@ static void sig_handler(int sigio) {
     return;
 }
 
-static int parse_SX130x_configuration(const char * conf_file) {
+static int parse_SX130x_configuration(const char * conf_file, uint8_t port) {
     int i, j, number;
     char param_name[32]; /* used to generate variable parameter names */
     const char *str; /* used to store string value from JSON object */
@@ -575,12 +576,24 @@ static int parse_SX130x_configuration(const char * conf_file) {
         strncpy(com_path, str, sizeof com_path);
         boardconf.com_path[sizeof boardconf.com_path - 1] = '\0'; /* ensure string termination */
         com_path[sizeof com_path - 1] = '\0'; /* ensure string termination */
+    } else if (port == 1) {
+        strncpy(boardconf.com_path, "/dev/spidev0.0", sizeof boardconf.com_path);
+        strncpy(sx1261conf.spi_path, "/dev/spidev0.1", sizeof sx1261conf.spi_path);
+        boardconf.tmp102 = 0x48;
+    } else if (port == 2) {
+        strncpy(boardconf.com_path, "/dev/spidev1.0", sizeof boardconf.com_path);
+        strncpy(sx1261conf.spi_path, "/dev/spidev1.1", sizeof sx1261conf.spi_path);
+        boardconf.tmp102 = 0x49;
     } else {
         MSG("WARNING: com_path not configured in %s. Using default value\n", conf_file);
     }
     val = json_object_get_value(conf_obj, "tmp102"); /* fetch value (if possible) */
     if (val != NULL && json_value_get_type(val) == JSONNumber) {
         boardconf.tmp102 = (uint8_t)json_value_get_number(val);
+    } else if (port == 1) {
+        boardconf.tmp102 = 0x48;
+    } else if (port == 2) {
+        boardconf.tmp102 = 0x49;
     } else {
         MSG("WARNING: tmp102 not configured in %s. Using default value\n", conf_file);
     }
@@ -711,6 +724,10 @@ static int parse_SX130x_configuration(const char * conf_file) {
         if (str != NULL) {
             strncpy(sx1261conf.spi_path, str, sizeof sx1261conf.spi_path);
             sx1261conf.spi_path[sizeof sx1261conf.spi_path - 1] = '\0'; /* ensure string termination */
+        } else if (port == 1) {
+            strncpy(sx1261conf.spi_path, "/dev/spidev0.1", sizeof sx1261conf.spi_path);
+        } else if (port == 2) {
+            strncpy(sx1261conf.spi_path, "/dev/spidev1.1", sizeof sx1261conf.spi_path);
         } else {
             MSG("INFO: SX1261 spi_path is not configured in %s\n", conf_file);
         }
@@ -1747,9 +1764,10 @@ void sighup_handler() {
     }
 }
 
-static char *short_options = "c:l:h";
+static char *short_options = "p:c:l:h";
 static struct option long_options[] = {
         {"logfile", 1, 0, 'l'},
+        {"port", 1, 0, 'p'},
         {"help", 0, 0, 'h'},
         {0, 0, 0, 0},
 };
@@ -1769,6 +1787,7 @@ int main(int argc, char ** argv)
     /* configuration file related */
     const char defaut_conf_fname[] = JSON_CONF_DEFAULT;
     const char * conf_fname = defaut_conf_fname; /* pointer to a string we won't touch */
+    uint8_t accessory_card_port = 0;
 
     /* threads */
     pthread_t thrid_up;
@@ -1847,7 +1866,14 @@ int main(int argc, char ** argv)
         case 'c':
             conf_fname = optarg;
             break;
-
+        case 'p':
+            accessory_card_port = atoi(optarg);
+            if (accessory_card_port != 1 && accessory_card_port != 2) {
+                printf( "ERROR: Invalid port value, use -h option for help\n" );
+                usage( );
+                return EXIT_FAILURE;
+            }
+            break;
         default:
             printf( "ERROR: argument parsing options, use -h option for help\n" );
             usage( );
@@ -1862,7 +1888,7 @@ int main(int argc, char ** argv)
         if (x != 0) {
             MSG("INFO: no debug configuration\n");
         }
-        x = parse_SX130x_configuration(conf_fname);
+        x = parse_SX130x_configuration(conf_fname, accessory_card_port);
         if (x != 0) {
             exit(EXIT_FAILURE);
         }
