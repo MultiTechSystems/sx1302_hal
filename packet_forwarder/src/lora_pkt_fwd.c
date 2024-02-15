@@ -143,6 +143,7 @@ volatile bool quit_sig = false; /* 1 -> application terminates without shutting 
 static bool fwd_valid_pkt = true; /* packets with PAYLOAD CRC OK are forwarded */
 static bool fwd_error_pkt = false; /* packets with PAYLOAD CRC ERROR are NOT forwarded */
 static bool fwd_nocrc_pkt = false; /* packets with NO PAYLOAD CRC are NOT forwarded */
+static bool fwd_best_pkt = true; /* duplicate packets with low SNR are NOT forwarded */
 
 /* network configuration variables */
 static uint64_t lgwm = 0; /* Lora gateway MAC address */
@@ -1399,6 +1400,12 @@ static int parse_gateway_configuration(const char * conf_file) {
     }
 
     /* packet filtering parameters */
+    val = json_object_get_value(conf_obj, "best_packet_filter");
+    if (json_value_get_type(val) == JSONBoolean) {
+        fwd_best_pkt = (bool)json_value_get_boolean(val);
+    }
+    MSG("INFO: duplicate packets received with low SNR will%s be forwarded\n", (!fwd_best_pkt ? "" : " NOT"));
+
     val = json_object_get_value(conf_obj, "forward_crc_valid");
     if (json_value_get_type(val) == JSONBoolean) {
         fwd_valid_pkt = (bool)json_value_get_boolean(val);
@@ -2429,6 +2436,38 @@ void thread_up(void) {
         /* start of JSON structure */
         memcpy((void *)(buff_up + buff_index), (void *)"{\"rxpk\":[", 9);
         buff_index += 9;
+
+        if (fwd_best_pkt && nb_pkt > 1) {
+            uint32_t check_addr = 0;
+            uint32_t check_mic = 0;
+            uint16_t check_fcnt = 0;
+            float check_snr = -30.0;
+
+            for (i=0; i < nb_pkt; ++i) {
+                p = &rxpkt[i];
+                if (p->size < 12)
+                    continue;
+
+                memcpy(&check_addr, p->payload + 1, 4);
+                memcpy(&check_fcnt, p->payload + 6, 2);
+                memcpy(&check_mic, p->payload + p->size - 4, 4);
+
+                check_snr = p->snr;
+
+                for (j=0; j < nb_pkt; ++j) {
+                    p = &rxpkt[j];
+
+                    if (p->size >= 12
+                        && memcmp(&check_addr, p->payload + 1, 4) == 0
+                        && memcmp(&check_fcnt, p->payload + 6, 2) == 0
+                        && memcmp(&check_mic, p->payload + p->size - 4, 4) == 0
+                        && p->snr < check_snr) {
+                        // set status of duplicate packets rx'd on wrong channel
+                        p->status = STAT_NO_CRC;
+                    }
+                }
+           }
+       }
 
         /* serialize Lora packets metadata and payload */
         pkt_in_dgram = 0;
