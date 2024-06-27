@@ -606,6 +606,13 @@ int lgw_get_default_info() {
             spiPath1261 = json_object_get_string(conf_obj_array, "spiPath1261");
             tmp102 = json_object_get_number(conf_obj_array, "tmp102");
 
+            if (accessory_port_size == 2 && (spiPath == NULL || spiPath1261 == NULL || tmp102 == 0)) {
+                conf_obj_array = json_array_get_object(conf_ac_array, 1);
+                spiPath = json_object_get_string(conf_obj_array, "spiPath");
+                spiPath1261 = json_object_get_string(conf_obj_array, "spiPath1261");
+                tmp102 = json_object_get_number(conf_obj_array, "tmp102");
+            }
+
             if (spiPath != NULL && spiPath1261 != NULL && hwVersion != 0 && tmp102 != 0) {
                 strcpy(lgw_context.board_cfg.com_path, spiPath);
                 strcpy(lgw_context.sx1261_cfg.spi_path, spiPath1261);
