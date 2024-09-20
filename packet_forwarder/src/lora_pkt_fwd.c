@@ -570,6 +570,28 @@ static int parse_SX130x_configuration(const char * conf_file, uint8_t port) {
         MSG("ERROR: invalid com type: %s (should be SPI or USB)\n", str);
         return -1;
     }
+    str = json_object_get_string(conf_obj, "channel_plan");
+    if (str == NULL) {
+        MSG("WARNING: channel_plan is not configured in %s, selecting US915 or EU868 power tables based on hardware type\n", conf_file);
+        boardconf.channel_plan = CHANNEL_PLAN_UNKNOWN;
+    } else if (!strncmp(str, "US915", 5) || !strncmp(str, "us915", 5)) {
+        boardconf.channel_plan = CHANNEL_PLAN_US915;
+    } else if (!strncmp(str, "AU915", 5) || !strncmp(str, "au915", 5)) {
+        boardconf.channel_plan = CHANNEL_PLAN_AU915;
+    } else if (!strncmp(str, "AS923", 5) || !strncmp(str, "as923", 5)) {
+        boardconf.channel_plan = CHANNEL_PLAN_AS923;
+    } else if (!strncmp(str, "KR920", 5) || !strncmp(str, "kr920", 5)) {
+        boardconf.channel_plan = CHANNEL_PLAN_KR920;
+    } else if (!strncmp(str, "EU868", 5) || !strncmp(str, "eu868", 5)) {
+        boardconf.channel_plan = CHANNEL_PLAN_EU868;
+    } else if (!strncmp(str, "IN865", 5) || !strncmp(str, "in865", 5)) {
+        boardconf.channel_plan = CHANNEL_PLAN_IN865;
+    } else if (!strncmp(str, "RU864", 5) || !strncmp(str, "ru864", 5)) {
+        boardconf.channel_plan = CHANNEL_PLAN_RU864;
+    } else {
+        MSG("ERROR: invalid channel plan : %s (should be US915, AU915, AS923, KR920, EU868, IN865, RU864)\n", str);
+        return -1;
+    }
     com_type = boardconf.com_type;
     str = json_object_get_string(conf_obj, "com_path");
     if (str != NULL) {

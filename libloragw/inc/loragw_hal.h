@@ -140,6 +140,22 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 
 /* Reset command array size*/
 #define RESET_COMMAND_LIST_SIZE 4
+
+/* conf files */
+#define CONF_PKF_MTCAP3_0_0_EU868 "/opt/lora/global_conf.json.MTCAP3_0_0.EU868"
+#define CONF_PKF_MTCAP3_0_1_EU868 "/opt/lora/global_conf.json.MTCAP3_0_1.EU868"
+#define CONF_PKF_MTCAP3_0_0_US915 "/opt/lora/global_conf.json.MTCAP3_0_0.US915"
+#define CONF_PKF_MTCAP3_0_1_US915 "/opt/lora/global_conf.json.MTCAP3_0_1.US915"
+#define CONF_PKF_MTCAP3_0_0_AU915 "/opt/lora/global_conf.json.MTCAP3_0_0.AU915"
+#define CONF_PKF_MTCAP3_0_1_AU915 "/opt/lora/global_conf.json.MTCAP3_0_1.AU915"
+
+#define CONF_BS_MTCAP3_0_0_EU868 "/opt/lora/station-sx1303.conf.EU00"
+#define CONF_BS_MTCAP3_0_1_EU868 "/opt/lora/station-sx1303.conf.EU01"
+#define CONF_BS_MTCAP3_0_0_US915 "/opt/lora/station-sx1303.conf.US00"
+#define CONF_BS_MTCAP3_0_1_US915 "/opt/lora/station-sx1303.conf.US01"
+#define CONF_BS_MTCAP3_0_0_AU915 "/opt/lora/station-sx1303.conf.AU00"
+#define CONF_BS_MTCAP3_0_1_AU915 "/opt/lora/station-sx1303.conf.AU01"
+
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC TYPES --------------------------------------------------------- */
 
@@ -163,10 +179,37 @@ typedef enum {
 typedef enum hardware_type_e {
     HW_MTCDT,
     HW_MTCPMHS,
-    HW_MTCAP_WITH_LBT,
-    HW_MTCAP_WITHOUT_LBT,
+    HW_MTCAP3_00_WITH_LBT,
+    HW_MTCAP3_00_WITHOUT_LBT,
+    HW_MTCAP3_01_WITH_LBT,
+    HW_MTCAP3_01_WITHOUT_LBT,
     HW_UNKNOWN,
 } hardware_type_t;
+
+/**
+@struct enum saw_filters_e
+@brief saw filter
+*/
+typedef enum saw_filters_e {
+    SAW_FILTER_US,
+    SAW_FILTER_EU,
+    SAW_FILTER_UNKNOWN
+} saw_filters_t;
+
+/**
+@struct enum channel_plans_e
+@brief channel plan
+*/
+typedef enum channel_plans_e {
+    CHANNEL_PLAN_US915,
+    CHANNEL_PLAN_AU915,
+    CHANNEL_PLAN_AS923,
+    CHANNEL_PLAN_KR920,
+    CHANNEL_PLAN_EU868,
+    CHANNEL_PLAN_IN865,
+    CHANNEL_PLAN_RU864,
+    CHANNEL_PLAN_UNKNOWN
+} channel_plans_t;
 
 /**
 @struct lgw_conf_board_s
@@ -181,6 +224,8 @@ struct lgw_conf_board_s {
     char            i2c_device[64]; /*!> Path to i2c bus for temp sensor */
     uint8_t         tmp102;         /*!> Tmp 102 address */
     hardware_type_t hardware_type;  /*!> Board hardware type */
+    saw_filters_t   saw_filters;    /*!> Board SAW Filter type */
+    channel_plans_t channel_plan;   /*!> Channel Plan */
     bool            gps_supported;  /*!> Board GPS support */
 
 };
@@ -431,7 +476,11 @@ typedef enum lgw_spectral_scan_status_e {
 @return LGW_HAL_ERROR id the operation failed, LGW_HAL_SUCCESS else
 */
 int lgw_get_default_info();
-
+/**
+@brief Get default tx gain lut values
+@return LGW_HAL_ERROR id the operation failed, LGW_HAL_SUCCESS else
+*/
+int lgw_get_default_tx_gain_lut(uint8_t rf_chain, struct lgw_tx_gain_lut_s * conf);
 /**
 @brief reset the lgw and export pins
 @return LGW_HAL_ERROR id the operation failed, LGW_HAL_SUCCESS else

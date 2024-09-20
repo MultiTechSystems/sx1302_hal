@@ -78,6 +78,8 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define CONTEXT_TMP102              lgw_context.board_cfg.tmp102
 #define CONTEXT_LWAN_PUBLIC         lgw_context.board_cfg.lorawan_public
 #define CONTEXT_HARDWARE            lgw_context.board_cfg.hardware_type
+#define CONTEXT_SAW_FILTER          lgw_context.board_cfg.saw_filters
+#define CONTEXT_CHANNEL_PLAN        lgw_context.board_cfg.channel_plan
 #define CONTEXT_GPS_SUPPORTED       lgw_context.board_cfg.gps_supported
 #define CONTEXT_BOARD               lgw_context.board_cfg
 #define CONTEXT_RF_CHAIN            lgw_context.rf_chain_cfg
@@ -135,6 +137,8 @@ static lgw_context_t lgw_context = {
     .board_cfg.full_duplex = false,
     .board_cfg.tmp102 = 0x48,
     .board_cfg.hardware_type = HW_UNKNOWN,
+    .board_cfg.saw_filters = SAW_FILTER_UNKNOWN,
+    .board_cfg.channel_plan = CHANNEL_PLAN_UNKNOWN,
     .rf_chain_cfg = {{0}},
     .if_chain_cfg = {{0}},
     .demod_cfg = {
@@ -533,10 +537,10 @@ static int reset_lgw(int start) {
                 printf("ERROR: Invalid com path: %s\n", CONTEXT_COM_PATH);
                 return LGW_HAL_ERROR;
             }
-        } else if (CONTEXT_HARDWARE == HW_MTCAP_WITH_LBT) {
+        } else if (CONTEXT_HARDWARE == HW_MTCAP3_00_WITH_LBT || CONTEXT_HARDWARE == HW_MTCAP3_01_WITH_LBT) {
             run_cmds(&mtcap_with_lbt_reset_cmd[0],
                     sizeof(mtcap_with_lbt_reset_cmd)/sizeof(mtcap_with_lbt_reset_cmd[0]));
-        } else if (CONTEXT_HARDWARE == HW_MTCAP_WITHOUT_LBT) {
+        } else if (CONTEXT_HARDWARE == HW_MTCAP3_00_WITHOUT_LBT || CONTEXT_HARDWARE == HW_MTCAP3_01_WITHOUT_LBT) {
             run_cmds(&mtcap_without_lbt_reset_cmd[0],
                     sizeof(mtcap_without_lbt_reset_cmd)/sizeof(mtcap_without_lbt_reset_cmd[0]));
         } else {
@@ -558,7 +562,9 @@ int lgw_get_default_info() {
     const char *spiPath; /* used to store string value from JSON object */
     const char *spiPath1261; /* used to store string value from JSON object */
     const char *hwVersion; /* used to store string value from JSON object */
-    const char conf_obj_name[] = "accessoryCards";
+    const char *productId; /* used to store string value from JSON object */
+    const char *accessoryCardProductId; /* used to store string value from JSON object */
+    const char conf_obj_tx_lut[] = "accessoryCards";
     JSON_Value *root_val;
     JSON_Object *conf_obj = NULL;
     JSON_Array *conf_ac_array = NULL;
@@ -594,6 +600,8 @@ int lgw_get_default_info() {
 
     hwVersion = json_object_get_string(conf_obj, "hardwareVersion");
 
+    productId = json_object_get_string(conf_obj, "productId");
+
     conf_ac_array = json_object_get_array (conf_obj, "accessoryCards");
 
     uint8_t accessory_port_size = 0;
@@ -605,6 +613,7 @@ int lgw_get_default_info() {
             spiPath = json_object_get_string(conf_obj_array, "spiPath");
             spiPath1261 = json_object_get_string(conf_obj_array, "spiPath1261");
             tmp102 = json_object_get_number(conf_obj_array, "tmp102");
+            accessoryCardProductId = json_object_get_string(conf_obj_array, "productId");
 
             if (accessory_port_size == 2 && (spiPath == NULL || spiPath1261 == NULL || tmp102 == 0)) {
                 conf_obj_array = json_array_get_object(conf_ac_array, 1);
@@ -618,16 +627,34 @@ int lgw_get_default_info() {
                 strcpy(lgw_context.sx1261_cfg.spi_path, spiPath1261);
                 lgw_context.board_cfg.tmp102 = tmp102;
                 if (strstr(hwVersion, "MTCAP")) {
+                    if (strstr(accessoryCardProductId, "E00")
+                        || strstr(accessoryCardProductId, "E01")) {
+                        lgw_context.board_cfg.saw_filters = SAW_FILTER_EU;
+                    } else {
+                        lgw_context.board_cfg.saw_filters = SAW_FILTER_US;
+                    }
                     int loraLbt = json_object_dotget_boolean(conf_obj, "capabilities.loraLbt");
                     if (loraLbt == -1) {
                         DEBUG_PRINTF("DEBUG: Lbt key does not exist, assuming support\n");
-                        lgw_context.board_cfg.hardware_type = HW_MTCAP_WITH_LBT;
+                        if (strstr(hwVersion, "MTCAP3-0.1")) {
+                            lgw_context.board_cfg.hardware_type = HW_MTCAP3_01_WITH_LBT;
+                        } else {
+                            lgw_context.board_cfg.hardware_type = HW_MTCAP3_00_WITH_LBT;
+                        }
                     } else if (loraLbt == 0) {
                         DEBUG_PRINTF("DEBUG: Lbt is not supported\n");
-                        lgw_context.board_cfg.hardware_type = HW_MTCAP_WITHOUT_LBT;
+                        if (strstr(hwVersion, "MTCAP3-0.1")) {
+                            lgw_context.board_cfg.hardware_type = HW_MTCAP3_01_WITHOUT_LBT;
+                        } else {
+                            lgw_context.board_cfg.hardware_type = HW_MTCAP3_00_WITHOUT_LBT;
+                        }
                     } else if (loraLbt == 1) {
                         DEBUG_PRINTF("DEBUG: Lbt is supported\n");
-                        lgw_context.board_cfg.hardware_type = HW_MTCAP_WITH_LBT;
+                        if (strstr(hwVersion, "MTCAP3-0.1")) {
+                            lgw_context.board_cfg.hardware_type = HW_MTCAP3_01_WITH_LBT;
+                        } else {
+                            lgw_context.board_cfg.hardware_type = HW_MTCAP3_00_WITH_LBT;
+                        }
                     } else {
                         printf("WARNING: Unable to get lora lbt support info\n");
                         return LGW_HAL_ERROR;
@@ -685,6 +712,10 @@ int lgw_board_setconf(struct lgw_conf_board_s * conf) {
     if (conf->tmp102 != 0) {
         CONTEXT_TMP102 = conf->tmp102;
     }
+    if (conf->channel_plan >= 0 && conf->channel_plan < 8) {
+        CONTEXT_CHANNEL_PLAN = conf->channel_plan;
+    }
+
     DEBUG_PRINTF("Note: board configuration: com_type: %s, com_path: %s, lorawan_public:%d, clksrc:%d, full_duplex:%d\n",   (CONTEXT_COM_TYPE == LGW_COM_SPI) ? "SPI" : "USB",
                                                                                                                             CONTEXT_COM_PATH,
                                                                                                                             CONTEXT_LWAN_PUBLIC,
@@ -944,16 +975,243 @@ int lgw_demod_setconf(struct lgw_conf_demod_s * conf) {
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
-int lgw_txgain_setconf(uint8_t rf_chain, struct lgw_tx_gain_lut_s * conf) {
+static char * lgw_get_tx_lut_conf_file() {
+    char * conf_file = NULL;
+    struct stat buffer;
+
+    if (CONTEXT_CHANNEL_PLAN != CHANNEL_PLAN_UNKNOWN) {
+        if (CONTEXT_HARDWARE == HW_MTCAP3_00_WITH_LBT
+            || CONTEXT_HARDWARE == HW_MTCAP3_00_WITHOUT_LBT) {
+            if (CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_EU868
+                || CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_IN865
+                || CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_RU864) {
+                if (stat(CONF_PKF_MTCAP3_0_0_EU868, &buffer) == 0) {
+                    conf_file = CONF_PKF_MTCAP3_0_0_EU868;
+                } else if (stat(CONF_BS_MTCAP3_0_0_EU868, &buffer) == 0) {
+                    conf_file = CONF_BS_MTCAP3_0_0_EU868;
+                }
+            } else if (CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_US915
+                || CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_KR920) {
+                if (stat(CONF_PKF_MTCAP3_0_0_US915, &buffer) == 0) {
+                    conf_file = CONF_PKF_MTCAP3_0_0_US915;
+                } else if (stat(CONF_BS_MTCAP3_0_0_US915, &buffer) == 0) {
+                    conf_file = CONF_BS_MTCAP3_0_0_US915;
+                }
+            } else if (CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_AU915
+                || CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_AS923) {
+                if (stat(CONF_PKF_MTCAP3_0_0_AU915, &buffer) == 0) {
+                    conf_file = CONF_PKF_MTCAP3_0_0_AU915;
+                } else if (stat(CONF_BS_MTCAP3_0_0_AU915, &buffer) == 0) {
+                    conf_file = CONF_BS_MTCAP3_0_0_AU915;
+                }
+            }
+        } else if (CONTEXT_HARDWARE == HW_MTCAP3_01_WITH_LBT
+            || CONTEXT_HARDWARE == HW_MTCAP3_01_WITHOUT_LBT) {
+            if (CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_EU868
+                || CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_IN865
+                || CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_RU864) {
+                if (stat(CONF_PKF_MTCAP3_0_1_EU868, &buffer) == 0) {
+                    conf_file = CONF_PKF_MTCAP3_0_1_EU868;
+                } else if (stat(CONF_BS_MTCAP3_0_1_EU868, &buffer) == 0) {
+                    conf_file = CONF_BS_MTCAP3_0_1_EU868;
+                }
+            } else if (CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_US915
+                || CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_KR920) {
+                if (stat(CONF_PKF_MTCAP3_0_1_US915, &buffer) == 0) {
+                    conf_file = CONF_PKF_MTCAP3_0_1_US915;
+                } else if (stat(CONF_BS_MTCAP3_0_1_US915, &buffer) == 0) {
+                    conf_file = CONF_BS_MTCAP3_0_1_US915;
+                }
+            } else if (CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_AU915
+                || CONTEXT_CHANNEL_PLAN == CHANNEL_PLAN_AS923) {
+                if (stat(CONF_PKF_MTCAP3_0_0_AU915, &buffer) == 0) {
+                    conf_file = CONF_PKF_MTCAP3_0_1_AU915;
+                } else if (stat(CONF_BS_MTCAP3_0_0_AU915, &buffer) == 0) {
+                    conf_file = CONF_BS_MTCAP3_0_1_AU915;
+                }
+            }
+        }
+    } else if (CONTEXT_SAW_FILTER == SAW_FILTER_EU) {
+        if (CONTEXT_HARDWARE == HW_MTCAP3_00_WITH_LBT
+            || CONTEXT_HARDWARE == HW_MTCAP3_00_WITHOUT_LBT) {
+            if (stat(CONF_PKF_MTCAP3_0_0_EU868, &buffer) == 0) {
+                conf_file = CONF_PKF_MTCAP3_0_0_EU868;
+            } else if (stat(CONF_BS_MTCAP3_0_0_EU868, &buffer) == 0) {
+                conf_file = CONF_BS_MTCAP3_0_0_EU868;
+            }
+        } else if (CONTEXT_HARDWARE == HW_MTCAP3_01_WITH_LBT
+            || CONTEXT_HARDWARE == HW_MTCAP3_01_WITHOUT_LBT) {
+            if (stat(CONF_PKF_MTCAP3_0_1_EU868, &buffer) == 0) {
+                conf_file = CONF_PKF_MTCAP3_0_1_EU868;
+            } else if (stat(CONF_BS_MTCAP3_0_1_EU868, &buffer) == 0) {
+                conf_file = CONF_BS_MTCAP3_0_1_EU868;
+            }
+        }
+    } else if (CONTEXT_SAW_FILTER == SAW_FILTER_US) {
+        if (CONTEXT_HARDWARE == HW_MTCAP3_00_WITH_LBT
+            || CONTEXT_HARDWARE == HW_MTCAP3_00_WITHOUT_LBT) {
+            if (stat(CONF_PKF_MTCAP3_0_0_US915, &buffer) == 0) {
+                    conf_file = CONF_PKF_MTCAP3_0_0_US915;
+                } else if (stat(CONF_BS_MTCAP3_0_0_US915, &buffer) == 0) {
+                    conf_file = CONF_BS_MTCAP3_0_0_US915;
+                }
+        } else if (CONTEXT_HARDWARE == HW_MTCAP3_01_WITH_LBT
+            || CONTEXT_HARDWARE == HW_MTCAP3_01_WITHOUT_LBT) {
+            if (stat(CONF_PKF_MTCAP3_0_1_US915, &buffer) == 0) {
+                conf_file = CONF_PKF_MTCAP3_0_1_US915;
+            } else if (stat(CONF_BS_MTCAP3_0_1_US915, &buffer) == 0) {
+                conf_file = CONF_BS_MTCAP3_0_1_US915;
+            }
+        }
+    }
+
+    return conf_file;
+}
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+int lgw_get_default_tx_gain_lut(uint8_t rf_chain, struct lgw_tx_gain_lut_s * txlut) {
+
+    char * conf_file = NULL;
+    int i, j = 0;
+    bool sx1250_tx_lut;
+    JSON_Value *val = NULL;
+    JSON_Object *conf_txgain_obj;
+    const char conf_obj_pkf[] = "SX130x_conf";
+    const char conf_obj_bs[] = "SX1301_conf";
+
+    const char conf_obj_tx_lut[] = "tx_gain_lut";
+    JSON_Object *conf_obj = NULL;
+    JSON_Value *root_val = NULL;
+    JSON_Array *conf_txlut_array = NULL;
+
+    conf_file = lgw_get_tx_lut_conf_file();
+    if (conf_file == NULL) {
+        printf("WARNING: Unable to get default tx lut values. Using global conf\n");
+        return LGW_HAL_ERROR;
+    }
+
+    /* try to parse JSON */
+    root_val = json_parse_file_with_comments(conf_file);
+    if (root_val == NULL) {
+        printf("ERROR: %s is not a valid JSON file\n", conf_file);
+        return LGW_HAL_ERROR;
+    }
+
+    /* point to the gateway configuration object */
+    conf_obj = json_object_get_object(json_value_get_object(root_val), conf_obj_pkf);
+
+    if (conf_obj == NULL) {
+        conf_obj = json_object_get_object(json_value_get_object(root_val), conf_obj_bs);
+    }
+
+    if (conf_obj == NULL) {
+        printf("INFO: %s does not contain a JSON object named %s or %s\n", conf_file, conf_obj_pkf, conf_obj_bs);
+        return LGW_HAL_ERROR;
+    }
+
+    conf_txlut_array = json_object_dotget_array(conf_obj, "radio_0.tx_gain_lut");
+    if (conf_txlut_array == NULL) {
+        printf("INFO: %s does not contain a JSON object named %s\n", conf_file, conf_obj_tx_lut);
+        return LGW_HAL_ERROR;
+    }
+
+    /* set configuration for tx gains */
+    memset(&txlut[i], 0, sizeof txlut[i]); /* initialize configuration structure */
+    txlut[i].size = json_array_get_count(conf_txlut_array);
+
+    printf("INFO: %s does contain a JSON object named %s with size %d \n", conf_file, conf_obj_tx_lut, txlut[i].size);
+
+    /* Detect if we have a sx125x or sx1250 configuration */
+    conf_txgain_obj = json_array_get_object(conf_txlut_array, 0);
+    val = json_object_dotget_value(conf_txgain_obj, "pwr_idx");
+    if (val != NULL) {
+        printf("INFO: Configuring Tx Gain LUT for rf_chain %u with %u indexes for sx1250\n", i, txlut[i].size);
+        sx1250_tx_lut = true;
+    } else {
+        printf("INFO: Configuring Tx Gain LUT for rf_chain %u with %u indexes for sx125x\n", i, txlut[i].size);
+        sx1250_tx_lut = false;
+    }
+    /* Parse the table */
+    for (j = 0; j < (int)txlut[i].size; j++) {
+        /* Sanity check */
+        if (j >= TX_GAIN_LUT_SIZE_MAX) {
+            printf("ERROR: TX Gain LUT [%u] index %d not supported, skip it\n", i, j);
+            break;
+        }
+        /* Get TX gain object from LUT */
+        conf_txgain_obj = json_array_get_object(conf_txlut_array, j);
+        /* rf power */
+        val = json_object_dotget_value(conf_txgain_obj, "rf_power");
+        if (json_value_get_type(val) == JSONNumber) {
+            txlut[i].lut[j].rf_power = (int8_t)json_value_get_number(val);
+        } else {
+            printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "rf_power", j);
+            txlut[i].lut[j].rf_power = 0;
+        }
+        /* PA gain */
+        val = json_object_dotget_value(conf_txgain_obj, "pa_gain");
+        if (json_value_get_type(val) == JSONNumber) {
+            txlut[i].lut[j].pa_gain = (uint8_t)json_value_get_number(val);
+        } else {
+            printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "pa_gain", j);
+            txlut[i].lut[j].pa_gain = 0;
+        }
+        if (sx1250_tx_lut == false) {
+            /* DIG gain */
+            val = json_object_dotget_value(conf_txgain_obj, "dig_gain");
+            if (json_value_get_type(val) == JSONNumber) {
+                txlut[i].lut[j].dig_gain = (uint8_t)json_value_get_number(val);
+            } else {
+                printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "dig_gain", j);
+                txlut[i].lut[j].dig_gain = 0;
+            }
+            /* DAC gain */
+            val = json_object_dotget_value(conf_txgain_obj, "dac_gain");
+            if (json_value_get_type(val) == JSONNumber) {
+                txlut[i].lut[j].dac_gain = (uint8_t)json_value_get_number(val);
+            } else {
+                printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "dac_gain", j);
+                txlut[i].lut[j].dac_gain = 3; /* This is the only dac_gain supported for now */
+            }
+            /* MIX gain */
+            val = json_object_dotget_value(conf_txgain_obj, "mix_gain");
+            if (json_value_get_type(val) == JSONNumber) {
+                txlut[i].lut[j].mix_gain = (uint8_t)json_value_get_number(val);
+            } else {
+                printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "mix_gain", j);
+                txlut[i].lut[j].mix_gain = 0;
+            }
+        } else {
+            /* TODO: rework this, should not be needed for sx1250 */
+            txlut[i].lut[j].mix_gain = 5;
+
+            /* power index */
+            val = json_object_dotget_value(conf_txgain_obj, "pwr_idx");
+            if (json_value_get_type(val) == JSONNumber) {
+                txlut[i].lut[j].pwr_idx = (uint8_t)json_value_get_number(val);
+            } else {
+                printf("WARNING: Data type for %s[%d] seems wrong, please check\n", "pwr_idx", j);
+                txlut[i].lut[j].pwr_idx = 0;
+            }
+        }
+    }
+    /* all parameters parsed, submitting configuration to the HAL */
+    if (txlut[i].size > 0) {
+        printf("INFO: All parameters have been parsed and validated. Tx Lut size %d\n", txlut[i].size);
+        return LGW_HAL_SUCCESS;
+    } else {
+        printf("WARNING: No TX gain LUT defined for rf_chain %u\n", i);
+    }
+
+    return LGW_HAL_ERROR;
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+static int lgw_set_context_tx_gain(uint8_t rf_chain, struct lgw_tx_gain_lut_s * conf) {
     int i;
 
     CHECK_NULL(conf);
-
-    /* Check LUT size */
-    if ((conf->size < 1) || (conf->size > TX_GAIN_LUT_SIZE_MAX)) {
-        DEBUG_PRINTF("ERROR: TX gain LUT must have at least one entry and  maximum %d entries\n", TX_GAIN_LUT_SIZE_MAX);
-        return LGW_HAL_ERROR;
-    }
 
     CONTEXT_TX_GAIN_LUT[rf_chain].size = conf->size;
 
@@ -993,8 +1251,26 @@ int lgw_txgain_setconf(uint8_t rf_chain, struct lgw_tx_gain_lut_s * conf) {
         /* sx1250 */
         CONTEXT_TX_GAIN_LUT[rf_chain].lut[i].pwr_idx = conf->lut[i].pwr_idx;
     }
-
     return LGW_HAL_SUCCESS;
+}
+
+/* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
+
+int lgw_txgain_setconf(uint8_t rf_chain, struct lgw_tx_gain_lut_s * conf) {
+    struct lgw_tx_gain_lut_s default_lut;
+
+    int i = lgw_get_default_tx_gain_lut(0, &default_lut);
+    if (lgw_get_default_tx_gain_lut(0, &default_lut) == LGW_HAL_SUCCESS
+        && lgw_set_context_tx_gain(rf_chain, &default_lut) == LGW_HAL_SUCCESS) {
+        printf("INFO: Found default tx lut gain values\n");
+        return LGW_HAL_SUCCESS;
+    } else if ((conf->size < 1) || (conf->size > TX_GAIN_LUT_SIZE_MAX)) {
+        printf("ERROR: TX gain LUT must have at least one entry and  maximum %d entries\n", TX_GAIN_LUT_SIZE_MAX);
+        return LGW_HAL_ERROR;
+    } else {
+        printf("INFO: Using user conf based tx lut values\n");
+        return lgw_set_context_tx_gain(rf_chain, conf);
+    }
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
@@ -1320,7 +1596,10 @@ int lgw_start(void) {
     dbg_init_random();
 
     if (CONTEXT_COM_TYPE == LGW_COM_SPI) {
-        if (CONTEXT_HARDWARE != HW_MTCAP_WITH_LBT && CONTEXT_HARDWARE != HW_MTCAP_WITHOUT_LBT) {
+        if (CONTEXT_HARDWARE != HW_MTCAP3_00_WITH_LBT
+            && CONTEXT_HARDWARE != HW_MTCAP3_00_WITHOUT_LBT
+            && CONTEXT_HARDWARE != HW_MTCAP3_01_WITH_LBT
+            && CONTEXT_HARDWARE != HW_MTCAP3_01_WITHOUT_LBT) {
             /* Find the temperature sensor on the known supported ports */
             ts_addr = CONTEXT_BOARD.tmp102;
             err = i2c_linuxdev_open(CONTEXT_I2C_DEVICE, ts_addr, &ts_fd);
@@ -1443,7 +1722,10 @@ int lgw_stop(void) {
     }
 
     if (CONTEXT_COM_TYPE == LGW_COM_SPI) {
-        if (CONTEXT_HARDWARE != HW_MTCAP_WITH_LBT && CONTEXT_HARDWARE != HW_MTCAP_WITHOUT_LBT) {
+        if (CONTEXT_HARDWARE != HW_MTCAP3_00_WITH_LBT
+            && CONTEXT_HARDWARE != HW_MTCAP3_00_WITHOUT_LBT
+            && CONTEXT_HARDWARE != HW_MTCAP3_01_WITH_LBT
+            && CONTEXT_HARDWARE != HW_MTCAP3_01_WITHOUT_LBT) {
             DEBUG_MSG("INFO: Closing I2C for temperature sensor\n");
             x = i2c_linuxdev_close(ts_fd);
             if (x != 0) {
@@ -1819,7 +2101,10 @@ int lgw_get_temperature(float* temperature) {
 
     CHECK_NULL(temperature);
 
-    if (CONTEXT_HARDWARE == HW_MTCAP_WITH_LBT || CONTEXT_HARDWARE == HW_MTCAP_WITHOUT_LBT) {
+    if (CONTEXT_HARDWARE == HW_MTCAP3_00_WITH_LBT
+        || CONTEXT_HARDWARE == HW_MTCAP3_00_WITHOUT_LBT
+        || CONTEXT_HARDWARE == HW_MTCAP3_01_WITH_LBT
+        || CONTEXT_HARDWARE == HW_MTCAP3_01_WITHOUT_LBT) {
         FILE *fptr;
         if ((fptr = fopen("/sys/class/hwmon/hwmon0/temp1_input","r")) == NULL){
             printf("Error: Unable to Open tmp102 file\n");
