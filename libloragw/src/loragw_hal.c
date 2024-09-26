@@ -1256,21 +1256,74 @@ static int lgw_set_context_tx_gain(uint8_t rf_chain, struct lgw_tx_gain_lut_s * 
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
 
-int lgw_txgain_setconf(uint8_t rf_chain, struct lgw_tx_gain_lut_s * conf) {
-    struct lgw_tx_gain_lut_s default_lut;
+// int lgw_txgain_setconf(uint8_t rf_chain, struct lgw_tx_gain_lut_s * conf) {
+//     struct lgw_tx_gain_lut_s default_lut;
 
-    int i = lgw_get_default_tx_gain_lut(0, &default_lut);
-    if (lgw_get_default_tx_gain_lut(0, &default_lut) == LGW_HAL_SUCCESS
-        && lgw_set_context_tx_gain(rf_chain, &default_lut) == LGW_HAL_SUCCESS) {
-        printf("INFO: Found default tx lut gain values\n");
-        return LGW_HAL_SUCCESS;
-    } else if ((conf->size < 1) || (conf->size > TX_GAIN_LUT_SIZE_MAX)) {
-        printf("ERROR: TX gain LUT must have at least one entry and  maximum %d entries\n", TX_GAIN_LUT_SIZE_MAX);
+//     int i = lgw_get_default_tx_gain_lut(0, &default_lut);
+//     if (lgw_get_default_tx_gain_lut(0, &default_lut) == LGW_HAL_SUCCESS
+//         && lgw_set_context_tx_gain(rf_chain, &default_lut) == LGW_HAL_SUCCESS) {
+//         printf("INFO: Found default tx lut gain values\n");
+//         return LGW_HAL_SUCCESS;
+//     } else if ((conf->size < 1) || (conf->size > TX_GAIN_LUT_SIZE_MAX)) {
+//         printf("ERROR: TX gain LUT must have at least one entry and  maximum %d entries\n", TX_GAIN_LUT_SIZE_MAX);
+//         return LGW_HAL_ERROR;
+//     } else {
+//         printf("INFO: Using user conf based tx lut values\n");
+//         return lgw_set_context_tx_gain(rf_chain, conf);
+//     }
+// }
+
+int lgw_txgain_setconf(uint8_t rf_chain, struct lgw_tx_gain_lut_s * conf) {
+    int i;
+
+    CHECK_NULL(conf);
+
+    /* Check LUT size */
+    if ((conf->size < 1) || (conf->size > TX_GAIN_LUT_SIZE_MAX)) {
+        DEBUG_PRINTF("ERROR: TX gain LUT must have at least one entry and  maximum %d entries\n", TX_GAIN_LUT_SIZE_MAX);
         return LGW_HAL_ERROR;
-    } else {
-        printf("INFO: Using user conf based tx lut values\n");
-        return lgw_set_context_tx_gain(rf_chain, conf);
     }
+
+    CONTEXT_TX_GAIN_LUT[rf_chain].size = conf->size;
+
+    for (i = 0; i < CONTEXT_TX_GAIN_LUT[rf_chain].size; i++) {
+        /* Check gain range */
+        if (conf->lut[i].dig_gain > 3) {
+            DEBUG_MSG("ERROR: TX gain LUT: SX1302 digital gain must be between 0 and 3\n");
+            return LGW_HAL_ERROR;
+        }
+        if (conf->lut[i].dac_gain > 3) {
+            DEBUG_MSG("ERROR: TX gain LUT: SX1257 DAC gains must not exceed 3\n");
+            return LGW_HAL_ERROR;
+        }
+        if ((conf->lut[i].mix_gain < 5) || (conf->lut[i].mix_gain > 15)) {
+            DEBUG_MSG("ERROR: TX gain LUT: SX1257 mixer gain must be betwen [5..15]\n");
+            return LGW_HAL_ERROR;
+        }
+        if (conf->lut[i].pa_gain > 3) {
+            DEBUG_MSG("ERROR: TX gain LUT: External PA gain must not exceed 3\n");
+            return LGW_HAL_ERROR;
+        }
+        if (conf->lut[i].pwr_idx > 22) {
+            DEBUG_MSG("ERROR: TX gain LUT: SX1250 power index must not exceed 22\n");
+            return LGW_HAL_ERROR;
+        }
+
+        /* Set internal LUT */
+        CONTEXT_TX_GAIN_LUT[rf_chain].lut[i].rf_power = conf->lut[i].rf_power;
+        CONTEXT_TX_GAIN_LUT[rf_chain].lut[i].dig_gain = conf->lut[i].dig_gain;
+        CONTEXT_TX_GAIN_LUT[rf_chain].lut[i].pa_gain  = conf->lut[i].pa_gain;
+        /* sx125x */
+        CONTEXT_TX_GAIN_LUT[rf_chain].lut[i].dac_gain = conf->lut[i].dac_gain;
+        CONTEXT_TX_GAIN_LUT[rf_chain].lut[i].mix_gain = conf->lut[i].mix_gain;
+        CONTEXT_TX_GAIN_LUT[rf_chain].lut[i].offset_i = 0; /* To be calibrated */
+        CONTEXT_TX_GAIN_LUT[rf_chain].lut[i].offset_q = 0; /* To be calibrated */
+
+        /* sx1250 */
+        CONTEXT_TX_GAIN_LUT[rf_chain].lut[i].pwr_idx = conf->lut[i].pwr_idx;
+    }
+
+    return LGW_HAL_SUCCESS;
 }
 
 /* ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ */
