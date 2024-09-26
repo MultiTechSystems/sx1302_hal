@@ -149,12 +149,12 @@ License: Revised BSD License, see LICENSE.TXT file include in the project
 #define CONF_PKF_MTCAP3_0_0_AU915 "/opt/lora/global_conf.json.MTCAP3_0_0.AU915"
 #define CONF_PKF_MTCAP3_0_1_AU915 "/opt/lora/global_conf.json.MTCAP3_0_1.AU915"
 
-#define CONF_BS_MTCAP3_0_0_EU868 "/opt/lora/station-sx1303.conf.EU00"
-#define CONF_BS_MTCAP3_0_1_EU868 "/opt/lora/station-sx1303.conf.EU01"
-#define CONF_BS_MTCAP3_0_0_US915 "/opt/lora/station-sx1303.conf.US00"
-#define CONF_BS_MTCAP3_0_1_US915 "/opt/lora/station-sx1303.conf.US01"
-#define CONF_BS_MTCAP3_0_0_AU915 "/opt/lora/station-sx1303.conf.AU00"
-#define CONF_BS_MTCAP3_0_1_AU915 "/opt/lora/station-sx1303.conf.AU01"
+#define CONF_BS_MTCAP3_0_0_EU868 "/opt/lora/station-sx1303.conf.E00"
+#define CONF_BS_MTCAP3_0_1_EU868 "/opt/lora/station-sx1303.conf.E01"
+#define CONF_BS_MTCAP3_0_0_US915 "/opt/lora/station-sx1303.conf.U00"
+#define CONF_BS_MTCAP3_0_1_US915 "/opt/lora/station-sx1303.conf.U01"
+#define CONF_BS_MTCAP3_0_0_AU915 "/opt/lora/station-sx1303.conf.A00"
+#define CONF_BS_MTCAP3_0_1_AU915 "/opt/lora/station-sx1303.conf.A01"
 
 /* -------------------------------------------------------------------------- */
 /* --- PUBLIC TYPES --------------------------------------------------------- */
