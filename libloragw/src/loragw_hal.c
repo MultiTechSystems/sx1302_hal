@@ -588,13 +588,13 @@ int lgw_get_default_info() {
     int gps_supported = json_object_dotget_boolean(conf_obj, "capabilities.gps");
 
     if (gps_supported == -1) {
-        DEBUG_PRINTF("GPS capability key not found in device info, disabling\n");
+        DEBUG_MSG("GPS capability key not found in device info, disabling\n");
         lgw_context.board_cfg.gps_supported = false;
     } else if (gps_supported == 0) {
-        DEBUG_PRINTF("GPS not supported, disabling");
+        DEBUG_MSG("GPS not supported, disabling");
         lgw_context.board_cfg.gps_supported = false;
     } else if (gps_supported == 1) {
-        DEBUG_PRINTF("GPS supported");
+        DEBUG_MSG("GPS supported");
         lgw_context.board_cfg.gps_supported = true;
     }
 
@@ -635,21 +635,21 @@ int lgw_get_default_info() {
                     }
                     int loraLbt = json_object_dotget_boolean(conf_obj, "capabilities.loraLbt");
                     if (loraLbt == -1) {
-                        DEBUG_PRINTF("DEBUG: Lbt key does not exist, assuming support\n");
+                        DEBUG_MSG("DEBUG: Lbt key does not exist, assuming support\n");
                         if (strstr(hwVersion, "MTCAP3-0.1")) {
                             lgw_context.board_cfg.hardware_type = HW_MTCAP3_01_WITH_LBT;
                         } else {
                             lgw_context.board_cfg.hardware_type = HW_MTCAP3_00_WITH_LBT;
                         }
                     } else if (loraLbt == 0) {
-                        DEBUG_PRINTF("DEBUG: Lbt is not supported\n");
+                        DEBUG_MSG("DEBUG: Lbt is not supported\n");
                         if (strstr(hwVersion, "MTCAP3-0.1")) {
                             lgw_context.board_cfg.hardware_type = HW_MTCAP3_01_WITHOUT_LBT;
                         } else {
                             lgw_context.board_cfg.hardware_type = HW_MTCAP3_00_WITHOUT_LBT;
                         }
                     } else if (loraLbt == 1) {
-                        DEBUG_PRINTF("DEBUG: Lbt is supported\n");
+                        DEBUG_MSG("DEBUG: Lbt is supported\n");
                         if (strstr(hwVersion, "MTCAP3-0.1")) {
                             lgw_context.board_cfg.hardware_type = HW_MTCAP3_01_WITH_LBT;
                         } else {
@@ -665,7 +665,7 @@ int lgw_get_default_info() {
                 } else if (strstr(hwVersion, "MTCDT")) {
                     lgw_context.board_cfg.hardware_type = HW_MTCDT;
                 }
-                DEBUG_PRINTF("DEBUG: Successfully device info defaults\n");
+                DEBUG_MSG("DEBUG: Successfully device info defaults\n");
                 return LGW_HAL_SUCCESS;
             }
         }
