@@ -3725,7 +3725,7 @@ void thread_jit(void) {
     int i;
 
     while (!exit_sig && !quit_sig) {
-        wait_ms(30);
+        wait_ms(20);
 
         for (i = 0; i < LGW_RF_CHAIN_NB; i++) {
             /* transfer data and metadata to the concentrator, and schedule TX */
@@ -3816,6 +3816,7 @@ void thread_jit(void) {
                 }
             } else if (jit_result == JIT_ERROR_EMPTY) {
                 /* Do nothing, it can happen */
+                wait_ms(20);
             } else {
                 MSG("ERROR: jit_peek failed on rf_chain %d with %d\n", i, jit_result);
             }
