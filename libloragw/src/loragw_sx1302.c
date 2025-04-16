@@ -2455,6 +2455,11 @@ int sx1302_send(lgw_radio_type_t radio_type, struct lgw_tx_gain_lut_s * tx_lut, 
             break;
         }
     }
+
+    if (pkt_data->modulation == MOD_FSK && pow_index != 0) {
+        pow_index -= 1;
+    }
+
     DEBUG_PRINTF("INFO: selecting TX Gain LUT index %u\n", pow_index);
 
     /* loading calibrated Tx DC offsets */
