@@ -625,6 +625,9 @@ int main(int argc, char **argv)
                         break;
                     }
                 } while ((tx_status != TX_FREE) && (quit_sig != 1) && (exit_sig != 1));
+                
+                if (strcmp(mod, "CW") == 0)
+                    lgw_abort_tx(0);
 
                 if ((quit_sig == 1) || (exit_sig == 1)) {
                     break;
