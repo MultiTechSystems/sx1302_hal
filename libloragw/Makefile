@@ -27,6 +27,7 @@ all: 	libloragw.a \
 		test_loragw_i2c \
 		test_loragw_reg \
 		test_loragw_hal_tx \
+		test_loragw_hal_tx_sweep \
 		test_loragw_hal_rx \
 		test_loragw_cal_sx125x \
 		test_loragw_capture_ram \
@@ -143,6 +144,9 @@ test_loragw_reg: tst/test_loragw_reg.c libloragw.a
 	$(CC) $(CFLAGS) -L. -L../libtools $< -o $@ $(LIBS)
 
 test_loragw_hal_tx: tst/test_loragw_hal_tx.c libloragw.a
+	$(CC) $(CFLAGS) -L. -L../libtools $< -o $@ $(LIBS)
+
+test_loragw_hal_tx_sweep: tst/test_loragw_hal_tx_sweep.c libloragw.a
 	$(CC) $(CFLAGS) -L. -L../libtools $< -o $@ $(LIBS)
 
 test_loragw_hal_rx: tst/test_loragw_hal_rx.c libloragw.a

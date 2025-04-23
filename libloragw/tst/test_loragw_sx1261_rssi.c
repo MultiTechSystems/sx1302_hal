@@ -83,6 +83,7 @@ int main(int argc, char ** argv)
     uint32_t fa = DEFAULT_FREQ_HZ;
     uint32_t fb = DEFAULT_FREQ_HZ;
     uint8_t clocksource = 0;
+    int8_t rssi_offset = 0;
     lgw_radio_type_t radio_type = LGW_RADIO_TYPE_SX1250;
 
     /* COM interfaces */
@@ -99,7 +100,7 @@ int main(int argc, char ** argv)
     struct lgw_conf_rxrf_s rfconf;
 
     /* Parse command line options */
-    while ((i = getopt(argc, argv, "hd:uf:D:k:r:a:b:t:")) != -1) {
+    while ((i = getopt(argc, argv, "hd:uf:D:k:r:a:b:t:o:")) != -1) {
         switch (i) {
             case 'h':
                 usage();
@@ -188,6 +189,17 @@ int main(int argc, char ** argv)
                 } else {
                     freq_hz = (uint32_t)((arg_d*1e6) + 0.5); /* .5 Hz offset to get rounding instead of truncating */
                 }
+                break;
+            case 'o': /* <float> SX1261 RSSI offset*/
+                i = sscanf(optarg, "%i", &xi);
+                if((i != 1) || (xi < -128) || (xi > 127)) {
+                    MSG("ERROR: rssi_offset must be b/w -128 & 127\n");
+                    usage();
+                    return EXIT_FAILURE;
+                } else {
+                    rssi_offset = (int8_t)xi;
+                }
+                
                 break;
 
             default:
@@ -304,7 +316,7 @@ int main(int argc, char ** argv)
 
         rssi_inst = -((float)buff[1] / 2);
 
-        printf("\rSX1261 RSSI at %uHz: %f dBm", freq_hz, rssi_inst);
+        printf("\rSX1261 RSSI at %uHz: %f dBm", freq_hz, rssi_inst + rssi_offset;
         fflush(stdout);
 
         wait_ms(100);
