@@ -191,13 +191,13 @@ int main(int argc, char ** argv)
                 }
                 break;
             case 'o': /* <float> SX1261 RSSI offset*/
-                i = sscanf(optarg, "%i", &xi);
-                if((i != 1) || (xi < -128) || (xi > 127)) {
-                    MSG("ERROR: rssi_offset must be b/w -128 & 127\n");
+                i = sscanf(optarg, "%lf", &arg_d);
+                if((i != 1) || (arg_d < -128.0) || (arg_d > 127.0)) {
+                    printf("ERROR: rssi_offset must be b/w -128 & 127\n");
                     usage();
                     return EXIT_FAILURE;
                 } else {
-                    rssi_offset = (int8_t)xi;
+                    rssi_offset = arg_d;
                 }
                 
                 break;
@@ -316,7 +316,7 @@ int main(int argc, char ** argv)
 
         rssi_inst = -((float)buff[1] / 2);
 
-        printf("\rSX1261 RSSI at %uHz: %f dBm", freq_hz, rssi_inst + rssi_offset;
+        printf("\rSX1261 RSSI at %uHz: %f dBm", freq_hz, rssi_inst + rssi_offset);
         fflush(stdout);
 
         wait_ms(100);
